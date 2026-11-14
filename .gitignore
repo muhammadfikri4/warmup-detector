@@ -6,3 +6,4 @@ DerivedData/
 *.xcuserstate
 build/
 training-data/
+Config/Local.xcconfig

@@ -140,3 +140,21 @@ Nama asli partisipan tidak pernah disimpan. Simpan daftar kode ↔ nama (bila pe
 - **Hitung repetisi**: classifier menentukan *jenis* gerakan (gerbang anti-cheat), sedangkan repetisi dihitung
   dari siklus sinyal (gravitasi untuk Arm Circles, yaw-rate untuk Torso Twist); March in Place berbasis durasi.
 - **Belum termasuk**: pemulihan sesi workout setelah app crash; training otomatis (pemicu sengaja manual di iPhone).
+
+## Signing per developer
+
+A bundle ID can only be owned by one Apple team, so each developer uses their own prefix. Defaults are in `Config/Signing.xcconfig`. Each Mac overrides them in `Config/Local.xcconfig`, which is git-ignored.
+
+```bash
+./scripts/setup-signing.sh albertus        # Team ID read automatically from the keychain
+./scripts/setup-signing.sh albertus ABCDE12345   # or pass the Team ID yourself
+```
+
+Then run on a physical device:
+
+```bash
+./scripts/run-iphone.sh    # iPhone (the watch app is embedded)
+./scripts/run-watch.sh     # Apple Watch (the Mac must be able to see the watch)
+```
+
+Do not change the Team or bundle ID under Signing & Capabilities in Xcode. That writes to `project.pbxproj` and overrides the setting for every other developer.

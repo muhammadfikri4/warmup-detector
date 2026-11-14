@@ -1,0 +1,9 @@
+// Signing defaults shared through git.
+// Each developer overrides these in Config/Local.xcconfig (git-ignored) — copy Local.xcconfig.example.
+//   BUNDLE_ID_PREFIX : reverse-DNS prefix unique to you (bundle IDs are owned by one Apple team)
+//   DEVELOPMENT_TEAM : your Team ID (Xcode → Settings → Accounts, or developer.apple.com → Membership)
+
+BUNDLE_ID_PREFIX = id.muhammadfikri
+DEVELOPMENT_TEAM = 94SXNQ884C
+
+#include? "Local.xcconfig"
