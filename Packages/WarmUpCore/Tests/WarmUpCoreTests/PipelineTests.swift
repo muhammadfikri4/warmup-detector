@@ -147,3 +147,78 @@ struct EvaluateTests {
         #expect(report.repErrors[.armCircles]?.first == 3)
     }
 }
+
+@Suite("Move targets set on the iPhone")
+struct MoveTargetTests {
+    @Test("Overrides only the moves that are set, and the plan length follows")
+    func appliesTargets() {
+        let plan = WarmUpPlanner().plan(exercises: [.marchInPlace, .armCircles], durationMinutes: 3, adjustments: [])
+        let custom = plan.applying(MoveTargets(armCirclesReps: 20, marchInPlaceSeconds: 60))
+        #expect(custom.steps.map(\.target) == [.duration(60), .reps(20)])
+        #expect(custom.durationMinutes == 2) // 60 s + 20 × 2 s = 100 s → 2 min
+        #expect(plan.applying(MoveTargets()) == plan)
+    }
+
+    @Test("Settings without moveTargets still decode")
+    func legacySettings() throws {
+        let legacy = #"{"useAppleIntelligence":true,"voiceGuidance":true,"zoneMethod":"karvonen","studyMode":false,"participant":"P01","wrist":"L","consent":false,"scenario":"unknown","autoCollect":false,"updatedAt":"2026-11-01T10:00:00Z"}"#
+        let s = try CompanionSettings.decode(Data(legacy.utf8))
+        #expect(s.moveTargets.isAutomatic)
+        var t = s; t.moveTargets.torsoTwistReps = 15
+        #expect(try CompanionSettings.decode(t.encoded()) == t)
+    }
+}
+
+@Suite("Insights")
+struct InsightTests {
+    func entry(_ outcome: WarmUpOutcome, hr: Double, day: Double, workout: WorkoutKind = .outdoorRun) -> SessionLogEntry {
+        let zones = HeartRateZones(physiology: UserPhysiology(age: 30, restingHR: 65))
+        let a = ReadinessAssessment(status: outcome == .notNeeded ? .ready : .notWarmedUp, heartRate: hr, zones: zones, reasons: [],
+                                    minutesAboveWarm: 0, trendBpmPerMinute: nil, hrQuality: HeartRateQuality())
+        return SessionLogEntry(date: Date(timeIntervalSince1970: 1_800_000_000 + day * 86_400), participant: nil, wrist: nil,
+                               scenario: .unknown, workout: workout, assessment: a, checkLatency: 1, classifier: "x",
+                               warmUp: outcome, finalConfirmed: nil, steps: [])
+    }
+
+    @Test("Counts, completion rate, weekly buckets and summary")
+    func stats() {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!; cal.firstWeekday = 2 // weeks start Monday
+        let s = InsightStats(entries: [
+            entry(.completed, hr: 70, day: 0), entry(.completed, hr: 74, day: 1), entry(.skipped, hr: 72, day: 2),
+            entry(.notNeeded, hr: 130, day: 9, workout: .hiit),
+        ], calendar: cal)
+        #expect(s.total == 4 && s.completed == 2 && s.skipped == 1 && s.alreadyWarm == 1)
+        #expect(s.completionRate == 2.0 / 3.0)
+        #expect(s.averageStartHR == 86.5)
+        #expect(s.weeks.map(\.total).reduce(0, +) == 4 && s.weeks.count == 2)
+        #expect(s.topWorkout == .outdoorRun)
+        let text = TemplateCoach.insightSummary(s)
+        #expect(text.contains("4 workouts") && text.contains("67%"))
+        #expect(SafetyGuardrail.validate(text, maxLength: 600) != nil)
+        #expect(TemplateCoach.insightSummary(InsightStats(entries: [])).hasPrefix("No workouts yet"))
+    }
+}
+
+@Suite("Ready-zone baseline per sport")
+struct ZoneBaselineTests {
+    let zones = HeartRateZones(physiology: UserPhysiology(age: 30, restingHR: 65))
+
+    @Test("A set baseline replaces the calculated zone; unset or invalid keeps it")
+    func overriding() {
+        let run = zones.overriding(ZoneBaseline(startBPM: 120, endBPM: 155))
+        #expect(run.lowerBound == 120 && run.upperBound == 155)
+        #expect(run.warmBound <= 120)
+        let half = zones.overriding(ZoneBaseline(startBPM: 110))
+        #expect(half.lowerBound == 110 && half.upperBound == zones.upperBound)
+        #expect(zones.overriding(ZoneBaseline(startBPM: 150, endBPM: 140)) == zones)
+        #expect(zones.overriding(nil) == zones)
+    }
+
+    @Test("Readiness uses the sport's baseline")
+    func readiness() {
+        let strength = zones.overriding(ZoneBaseline(startBPM: 100, endBPM: 130))
+        let input = ReadinessInput(currentHR: HeartRateSample(date: .now, bpm: 105), history: [], recentActiveEnergy: nil,
+                                   zones: strength, now: .now)
+        #expect(ReadinessEngine().evaluate(input).status == .ready)
+    }
+}

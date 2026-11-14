@@ -60,13 +60,16 @@ private struct RecorderContent: View {
                     Picker("Label", selection: $recorder.label) {
                         ForEach(MotionLabel.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
-                    Stepper("Duration \(recorder.durationSeconds)s", value: $recorder.durationSeconds, in: 10...120, step: 10)
+                    Picker("Duration", selection: $recorder.durationSeconds) {
+                        ForEach([10, 20, 30, 45, 60, 90, 120], id: \.self) { Text("\($0) s").tag($0) }
+                    }
+                    .pickerStyle(.navigationLink)
                     Button("Record") { recorder.start() }
                         .tint(Theme.warm)
                         .disabled(!consent)
                 }
                 Section {
-                    if case .saved(let info) = recorder.state { Text("Saved: \(info)").font(.footnote) }
+                    if case .saved(let info) = recorder.state { Text(info).font(.footnote) }
                     if case .failed(let error) = recorder.state { Text(error).font(.footnote).foregroundStyle(.red) }
                     let counts = recorder.countsForCurrentParticipant()
                     ForEach(MotionLabel.allCases, id: \.self) { label in

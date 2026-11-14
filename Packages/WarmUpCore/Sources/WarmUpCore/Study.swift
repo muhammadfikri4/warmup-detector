@@ -121,6 +121,15 @@ public enum WarmUpOutcome: String, Codable, Sendable {
     case completed
     /// Session cancelled before finishing.
     case abandoned
+
+    public var displayName: String {
+        switch self {
+        case .notNeeded: "Already warm"
+        case .skipped: "Warm-up skipped"
+        case .completed: "Warm-up completed"
+        case .abandoned: "Cancelled"
+        }
+    }
 }
 
 public struct StepLog: Codable, Sendable, Equatable {
@@ -160,10 +169,13 @@ public struct SessionLogEntry: Codable, Sendable, Equatable {
     public var warmUp: WarmUpOutcome
     public var finalConfirmed: Bool?
     public var steps: [StepLog]
+    /// Human-readable warm-up summary shown in the iPhone history (nil in older logs).
+    public var summary: String?
 
     public init(id: UUID = UUID(), date: Date, participant: String?, wrist: Wrist?, scenario: ReferenceScenario,
                 workout: WorkoutKind, assessment: ReadinessAssessment, checkLatency: TimeInterval, classifier: String,
-                warmUp: WarmUpOutcome, finalConfirmed: Bool?, steps: [StepLog]) {
+                warmUp: WarmUpOutcome, finalConfirmed: Bool?, steps: [StepLog], summary: String? = nil) {
+        self.summary = summary
         self.id = id
         self.date = date
         self.participant = participant

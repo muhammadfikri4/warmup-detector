@@ -20,12 +20,19 @@ final class SpeechCoach {
     func speak(_ text: String) {
         guard AppSettings.voiceGuidance else { return }
         let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
+        // Spoken-audio mode at full gain (voicePrompt mode plays quieter on the watch speaker);
+        // other audio is ducked so the cue stands out.
+        try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
         try? session.setActive(true)
         if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.volume = 1.0
+        // Slightly slower and brighter: easier to understand from a wrist speaker while moving.
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
+        utterance.pitchMultiplier = 1.1
+        // Let a haptic or chime finish first so it doesn't mask the first word.
+        utterance.preUtteranceDelay = 0.25
         synthesizer.speak(utterance)
     }
 

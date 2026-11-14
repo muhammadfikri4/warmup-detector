@@ -211,14 +211,16 @@ struct ExerciseDemoCard: View {
                 Text(caption).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             }
             ExerciseDemoView(exercise: step.exercise)
-                .frame(maxHeight: 110)
+                .frame(width: 84, height: 84)
+                .layoutPriority(1)
             Text(step.exercise.displayName).font(.headline)
             Text(Self.targetText(step.target)).font(.footnote.weight(.semibold)).foregroundStyle(Theme.warm)
             Text(step.exercise.instruction)
                 .font(.caption2)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(3)
+                .minimumScaleFactor(0.8)
         }
         .padding(.horizontal, 4)
     }

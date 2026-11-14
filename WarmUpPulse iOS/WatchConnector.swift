@@ -101,6 +101,12 @@ extension WatchConnector: WCSessionDelegate {
         Task { @MainActor in self.onSessionLine?(line) }
     }
 
+    /// Same payload as user info, sent directly while the iPhone app is reachable.
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        guard message[SyncKey.kind] as? String == SyncKey.session, let line = message[SyncKey.data] as? String else { return }
+        Task { @MainActor in self.onSessionLine?(line) }
+    }
+
     nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {
         // The temporary file is only valid while this method runs → move it right away.
         guard file.metadata?[SyncKey.kind] as? String == SyncKey.training,

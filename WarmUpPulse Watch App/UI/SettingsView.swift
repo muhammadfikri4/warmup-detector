@@ -20,17 +20,15 @@ struct SettingsView: View {
             }
             Section("Coach") {
                 LabeledContent("Apple Intelligence", value: useAI ? "On" : "Off")
-                LabeledContent("AI Status", value: flow.coach.availabilityText)
-                LabeledContent("Voice guidance", value: voice ? "On" : "Off")
-                if voice {
-                    LabeledContent("Voice", value: SpeechCoach.voiceDescription)
+                if useAI, flow.coach.availabilityText != "Available" {
+                    Text("Not available on this watch, so built-in messages are used.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
+                LabeledContent("Voice guidance", value: voice ? "On" : "Off")
                 LabeledContent("HR zone", value: ZoneMethod(rawValue: zoneMethod)?.displayName ?? zoneMethod)
             }
             StudySettingsSection()
-            Section("Motion classifier") {
-                Text(ClassifierFactory.activeClassifierName).font(.footnote)
-            }
         }
         .navigationTitle("Settings")
     }

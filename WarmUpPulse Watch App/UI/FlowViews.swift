@@ -23,6 +23,7 @@ struct RootView: View {
                 case .ready: ReadyView()
                 case .workout: WorkoutView()
                 case .finished: FinishedView()
+                case .failed(let issue): FailureView(issue: issue)
                 }
             }
             .animation(.easeInOut, value: flow.phase)
@@ -30,14 +31,33 @@ struct RootView: View {
     }
 }
 
+/// Live heart rate from the workout session, updating as each sample arrives.
+/// Until the first live sample, it shows the latest Health reading (dimmed) or "Measuring…".
 struct HeartRateLabel: View {
-    let bpm: Double?
+    @Environment(AppFlow.self) private var flow
+    var size: Font = .system(.body, design: .rounded).weight(.semibold)
 
     var body: some View {
-        Label(bpm.map { "\(Int($0))" } ?? "--", systemImage: "heart.fill")
-            .font(.system(.body, design: .rounded).weight(.semibold))
-            .monospacedDigit()
-            .foregroundStyle(.red)
+        let reading = flow.displayHeartRate
+        HStack(spacing: 4) {
+            Image(systemName: "heart.fill")
+                .symbolEffect(.pulse, options: .repeating, isActive: reading?.isLive ?? true)
+            if let reading {
+                Text("\(Int(reading.bpm.rounded()))")
+                    .contentTransition(.numericText())
+                    .animation(.default, value: Int(reading.bpm.rounded()))
+                if !reading.isLive {
+                    Text("last").font(.caption2)
+                }
+            } else {
+                Text("Measuring…").font(.footnote)
+            }
+        }
+        .font(size)
+        .monospacedDigit()
+        .foregroundStyle(reading?.isLive == false ? Color.gray : Color.red)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(reading.map { "Heart rate \(Int($0.bpm.rounded())) beats per minute" } ?? "Measuring heart rate")
     }
 }
 
@@ -47,14 +67,7 @@ struct DataQualityNote: View {
 
     var body: some View {
         if let quality, quality.removedCount > 0 || quality.longestGapMinutes >= 3 {
-            Label {
-                Text([
-                    quality.removedCount > 0 ? "\(quality.removedCount) HR samples dropped" : nil,
-                    quality.longestGapMinutes >= 3 ? "\(Int(quality.longestGapMinutes)) min data gap" : nil,
-                ].compactMap { $0 }.joined(separator: " · "))
-            } icon: {
-                Image(systemName: "exclamationmark.circle")
-            }
+            Label("Some heart-rate readings were missing", systemImage: "exclamationmark.circle")
             .font(.caption2)
             .foregroundStyle(.secondary)
         }
@@ -96,7 +109,12 @@ struct HomeView: View {
             }
         }
         .navigationTitle("WarmUp Pulse")
-        .task { await flow.prepare() }
+        .task {
+            await flow.prepare()
+            #if DEBUG
+            flow.loadDemoIfRequested()
+            #endif
+        }
         .alert("Heads Up", isPresented: Binding(get: { flow.errorMessage != nil }, set: { if !$0 { flow.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -115,7 +133,7 @@ struct CheckingView: View {
             ProgressView()
             Text("Checking readiness…")
                 .font(.headline)
-            HeartRateLabel(bpm: flow.heartRate)
+            HeartRateLabel()
         }
         .navigationBarBackButtonHidden()
         .toolbar {
@@ -140,16 +158,18 @@ struct UnreadyView: View {
                 .foregroundStyle(Theme.warm)
                 .minimumScaleFactor(0.7)
 
+                HeartRateLabel()
+
                 Text(flow.message)
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if flow.isRefiningWithAI {
-                    Label("Apple Intelligence is tailoring…", systemImage: "sparkles")
+                    Label("Personalizing…", systemImage: "sparkles")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 } else if flow.messageFromAI {
-                    Label("Tailored by Apple Intelligence", systemImage: "sparkles")
+                    Label("Personalized for you", systemImage: "sparkles")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -176,6 +196,7 @@ struct UnreadyView: View {
                     .buttonStyle(.bordered)
             }
         }
+        .defaultScrollAnchor(.top)
         .navigationBarBackButtonHidden()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel", systemImage: "xmark") { flow.cancel() } }
@@ -198,7 +219,7 @@ struct WarmUpView: View {
                     if introStep == flow.stepIndex {
                         ExerciseDemoCard(step: step, caption: flow.stepIndex == 0 ? "First move" : "Next move")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(.black.opacity(0.92))
+                            .background(Color.black.ignoresSafeArea())
                             .onTapGesture { introStep = nil }
                             .transition(.opacity)
                     }
@@ -223,7 +244,7 @@ struct WarmUpView: View {
                     Text("Move \(flow.stepIndex + 1)/\(plan.steps.count)")
                         .font(.footnote.weight(.semibold))
                     Spacer()
-                    HeartRateLabel(bpm: flow.heartRate)
+                    HeartRateLabel()
                 }
 
                 Text(step.exercise.displayName)
@@ -260,10 +281,6 @@ struct WarmUpView: View {
                     Text("Paused — keep moving!")
                         .font(.headline)
                         .foregroundStyle(.yellow)
-                } else if let p = flow.lastPrediction {
-                    Text("\(label(p.label)) \(Int(p.confidence * 100))%\(flow.lastInferenceMilliseconds.map { String(format: " · %.0f ms", $0) } ?? "")")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 4)
@@ -289,9 +306,6 @@ struct WarmUpView: View {
         }
     }
 
-    private func label(_ l: MotionLabel) -> String {
-        l.exercise?.displayName ?? (l == .idle ? "Still" : "Other move")
-    }
 }
 
 // MARK: - 6. Final confirmation
@@ -310,14 +324,27 @@ struct ConfirmView: View {
                         .tint(Theme.warm)
                     Button("Start Now") { flow.enterWorkout() }
                         .buttonStyle(.bordered)
+                        .handGestureShortcut(.primaryAction)
                 } else {
-                    ProgressView()
-                    Text("Checking heart rate…")
+                    Label("Warm-up complete", systemImage: "checkmark.circle.fill")
                         .font(.headline)
-                        .multilineTextAlignment(.center)
-                    HeartRateLabel(bpm: flow.heartRate)
+                        .foregroundStyle(.white)
+                    Button {
+                        flow.enterWorkout()
+                    } label: {
+                        Label("Start Workout", systemImage: "play.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.ready)
+                    .handGestureShortcut(.primaryAction) // double tap starts the workout hands-free
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Checking heart rate…").font(.footnote)
+                    }
+                    HeartRateLabel(size: .system(.title3, design: .rounded).weight(.semibold))
                     if let zones = flow.zones {
-                        Text("Target ≥ \(Int(zones.lowerBound)) bpm")
+                        Text("Goal: \(Int(zones.lowerBound)) bpm")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -339,10 +366,12 @@ struct ReadyView: View {
                     .font(.system(size: 40))
                 Text("Ready to Go")
                     .font(Theme.headline)
+                HeartRateLabel()
                 Text(flow.message)
                     .font(.footnote)
                     .multilineTextAlignment(.center)
                 Button("Start") { flow.enterWorkout() }
+                    .handGestureShortcut(.primaryAction)
                     .buttonStyle(.borderedProminent)
                     .tint(.white.opacity(0.3))
             }
@@ -368,8 +397,7 @@ struct WorkoutView: View {
                     .formatted(.time(pattern: .hourMinuteSecond)))
                     .font(.system(size: 36, weight: .semibold, design: .rounded))
                     .monospacedDigit()
-                HeartRateLabel(bpm: flow.heartRate)
-                    .font(.title2)
+                HeartRateLabel(size: .system(.title2, design: .rounded).weight(.semibold))
                 Spacer(minLength: 0)
                 Button("End", role: .destructive) { flow.endWorkout() }
                     .buttonStyle(.bordered)
@@ -401,5 +429,87 @@ struct FinishedView: View {
                 .buttonStyle(.borderedProminent)
         }
         .navigationBarBackButtonHidden()
+    }
+}
+
+// MARK: - Failure fallback
+
+/// Shown instead of an error alert: says what happened in plain words and offers a way forward.
+struct FailureView: View {
+    @Environment(AppFlow.self) private var flow
+    let issue: AppFlow.FlowIssue
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundStyle(Theme.warm)
+                Text(title)
+                    .font(.headline)
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                actions
+                Button("Back to Home") { flow.cancel() }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .navigationBarBackButtonHidden()
+    }
+
+    private var icon: String {
+        switch issue {
+        case .healthAccess: "heart.text.square"
+        case .workoutStart: "exclamationmark.arrow.circlepath"
+        case .noHeartRate: "heart.slash"
+        case .motionUnavailable: "figure.stand"
+        }
+    }
+
+    private var title: String {
+        switch issue {
+        case .healthAccess: "Heart rate access needed"
+        case .workoutStart: "Couldn’t start the workout"
+        case .noHeartRate: "No heart rate yet"
+        case .motionUnavailable: "Can’t track movement"
+        }
+    }
+
+    private var message: String {
+        switch issue {
+        case .healthAccess:
+            "Allow WarmUp Pulse to read heart rate in Settings › Health › Apps › WarmUp Pulse, then try again."
+        case .workoutStart(let detail):
+            "Another workout may be running, or the watch is busy. Close other workout apps and try again. (\(detail))"
+        case .noHeartRate:
+            "Wear the watch snugly above the wrist bone and keep still for a moment. You can also warm up without the check."
+        case .motionUnavailable:
+            "Movement sensors aren’t available right now, so reps can’t be counted. You can skip the warm-up or try again."
+        }
+    }
+
+    @ViewBuilder private var actions: some View {
+        switch issue {
+        case .healthAccess, .workoutStart:
+            Button("Try Again") { flow.retry() }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.warm)
+        case .noHeartRate:
+            Button("Try Again") { flow.retry() }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.warm)
+            Button("Warm Up Anyway") { flow.warmUpWithoutHeartRate() }
+                .buttonStyle(.bordered)
+            Button("Start Workout") { flow.enterWorkout() }
+                .buttonStyle(.bordered)
+        case .motionUnavailable:
+            Button("Skip Warm-Up") { flow.skipWarmUp() }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.ready)
+            Button("Try Again") { flow.retry() }
+                .buttonStyle(.bordered)
+        }
     }
 }

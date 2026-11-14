@@ -8,6 +8,16 @@ import WarmUpCore
 final class AppFlow {
     enum Phase: Equatable {
         case home, checking, unready, warmingUp, confirming, ready, workout, finished
+        /// Something went wrong; a fallback screen explains it and offers a way forward.
+        case failed(FlowIssue)
+    }
+
+    /// Problems the flow can recover from without crashing or getting stuck.
+    enum FlowIssue: Equatable {
+        case healthAccess
+        case workoutStart(String)
+        case noHeartRate
+        case motionUnavailable
     }
 
     // MARK: UI state
@@ -32,7 +42,21 @@ final class AppFlow {
 
     var isStudyLogging: Bool { AppSettings.isStudyLogging }
 
+    /// Live heart rate from the workout session. Decisions use only this value.
     var heartRate: Double? { workoutManager.latestHeartRate?.bpm }
+    /// Latest Health reading from before the live stream started (display only).
+    private(set) var lastKnownHeartRate: HeartRateSample?
+    /// What the UI shows: the live value as soon as it exists, else the last known reading.
+    var displayHeartRate: (bpm: Double, isLive: Bool)? {
+        if let live = workoutManager.latestHeartRate { return (live.bpm, true) }
+        #if DEBUG
+        if demoMode, let last = lastKnownHeartRate { return (last.bpm, true) }
+        #endif
+        return lastKnownHeartRate.map { ($0.bpm, false) }
+    }
+    #if DEBUG
+    @ObservationIgnored private var demoMode = false
+    #endif
     var zones: HeartRateZones? { assessment?.zones }
     var currentStep: WarmUpStep? { activePlan.flatMap { stepIndex < $0.steps.count ? $0.steps[stepIndex] : nil } }
 
@@ -72,7 +96,7 @@ final class AppFlow {
             try await health.requestAuthorization()
             authorized = true
         } catch {
-            errorMessage = "HealthKit access is needed to read your heart rate."
+            // Handled by the fallback screen when the user taps Start.
         }
     }
 
@@ -87,12 +111,15 @@ final class AppFlow {
 
     private func runReadinessCheck() async {
         await prepare()
+        guard authorized else {
+            fail(.healthAccess)
+            return
+        }
         let startedAt = Date()
         do {
             try await workoutManager.start(workout)
         } catch {
-            errorMessage = "Couldn't start workout session: \(error.localizedDescription)"
-            phase = .home
+            fail(.workoutStart(error.localizedDescription))
             return
         }
 
@@ -110,11 +137,19 @@ final class AppFlow {
 
         self.recovery = recovery
         heartRateLog = samples + heartRateLog
+        lastKnownHeartRate = samples.last
         let zones = HeartRateZones(physiology: recovery.physiology, configuration: AppSettings.zoneConfiguration)
+            .overriding(AppSettings.zoneBaseline(for: workout))
         let result = readiness.evaluate(ReadinessInput(currentHR: live, history: samples, recentActiveEnergy: kcal,
                                                        zones: zones, now: .now))
         assessment = result
         checkLatency = Date().timeIntervalSince(checkStartedAt)
+
+        // No live or recent heart rate: don't guess. Let the user retry or choose what to do.
+        if result.reasons.contains(where: { if case .noRecentHeartRate = $0 { true } else { false } }) {
+            fail(.noHeartRate)
+            return
+        }
 
         if result.status == .ready {
             message = TemplateCoach.readyMessage(workout: workout, heartRate: result.heartRate, zones: zones, afterWarmUp: false)
@@ -126,7 +161,8 @@ final class AppFlow {
 
     // MARK: 4. Warning & plan
     private func presentUnready(_ result: ReadinessAssessment, recovery: RecoveryContext) {
-        let basePlan = planner.plan(for: recovery)
+        let targets = AppSettings.moveTargets
+        let basePlan = planner.plan(for: recovery).applying(targets)
         plan = basePlan
         cues = []
         let context = CoachContext(recovery: recovery, assessment: result, plan: basePlan)
@@ -141,8 +177,9 @@ final class AppFlow {
             isRefiningWithAI = false
             guard phase == .unready, let suggestion else { return }
             message = suggestion.message
-            plan = suggestion.plan
-            cues = suggestion.cues
+            plan = suggestion.plan.applying(targets)
+            // AI cues mention the automatic targets, so they're only used when nothing was set on the iPhone.
+            cues = targets.isAutomatic ? suggestion.cues : []
             messageFromAI = true
         }
     }
@@ -175,7 +212,9 @@ final class AppFlow {
         }
         self.pipeline = pipeline
         if !motion.start(handler: { pipeline.process($0) }) {
-            errorMessage = "Motion sensors aren't available on this device."
+            stopMotion()
+            speech.stop()
+            fail(.motionUnavailable)
         }
     }
 
@@ -223,6 +262,8 @@ final class AppFlow {
         stopMotion() // NFR-01: turn off the 50 Hz sensor right away
         phase = .confirming
         confirmTimedOut = false
+        Haptics.play(.success)
+        speech.speak("Warm-up complete. Tap Start Workout, or double tap, to begin now.")
         flowTask = Task { await confirmReadiness() }
     }
 
@@ -256,6 +297,24 @@ final class AppFlow {
     }
 
     // MARK: Main workout
+    // MARK: Fallbacks
+    private func fail(_ issue: FlowIssue) {
+        flowTask?.cancel()
+        Haptics.play(.failure)
+        phase = .failed(issue)
+    }
+
+    /// Runs the readiness check again for the same workout.
+    func retry() {
+        start(workout)
+    }
+
+    /// No heart rate: go ahead with the normal warm-up plan anyway.
+    func warmUpWithoutHeartRate() {
+        guard let assessment, let recovery else { return start(workout) }
+        presentUnready(assessment, recovery: recovery)
+    }
+
     func skipWarmUp() {
         warmUpSkipped = true
         enterWorkout()
@@ -277,7 +336,8 @@ final class AppFlow {
         let alreadyReady = warmUpStart == nil && !warmUpSkipped
         Task {
             let note = alreadyReady
-                ? "Already ready at start (HR \(heartRate.map { "\(Int($0))" } ?? "–") bpm), no extra warm-up needed."
+                ? (heartRate.map { "Already ready at start (HR \(Int($0)) bpm), no extra warm-up needed." }
+                    ?? "Started without a warm-up check.")
                 : await coach.summaryNote(summary, workout: workout)
             summaryNote = note
             await workoutManager.addMetadata([
@@ -291,6 +351,9 @@ final class AppFlow {
         Task {
             await workoutManager.end()
             phase = .finished
+            // Personal history goes to the iPhone right away. Study sessions wait for Save & Finish
+            // so the researcher's manual counts are included.
+            if !AppSettings.isStudyLogging { logSession(references: [:]) }
         }
     }
 
@@ -332,8 +395,10 @@ final class AppFlow {
 
     // MARK: Evaluation log (Study Mode)
     private func logSession(references: [Int: Int]) {
-        guard AppSettings.isStudyLogging, !sessionLogged, let assessment else { return }
+        guard !sessionLogged, let assessment else { return }
         sessionLogged = true
+        // Study fields (participant, wrist, reference scenario) only with Study Mode + consent.
+        let study = AppSettings.isStudyLogging
 
         let outcome: WarmUpOutcome =
             if warmUpSkipped { .skipped }
@@ -346,18 +411,18 @@ final class AppFlow {
             return step
         }
         let entry = SessionLogEntry(
-            date: checkStartedAt, participant: AppSettings.participant, wrist: AppSettings.wrist,
-            scenario: AppSettings.scenario, workout: workout, assessment: assessment, checkLatency: checkLatency,
+            date: checkStartedAt, participant: study ? AppSettings.participant : nil, wrist: study ? AppSettings.wrist : nil,
+            scenario: study ? AppSettings.scenario : .unknown, workout: workout, assessment: assessment, checkLatency: checkLatency,
             classifier: classifierName.isEmpty ? ClassifierFactory.activeClassifierName : classifierName,
-            warmUp: outcome, finalConfirmed: finalConfirmed, steps: steps
+            warmUp: outcome, finalConfirmed: finalConfirmed, steps: steps, summary: summaryNote
         )
         do {
             try SessionLogger.append(entry)
         } catch {
-            errorMessage = "Couldn't save evaluation log: \(error.localizedDescription)"
+            errorMessage = "Couldn't save the workout log: \(error.localizedDescription)"
         }
         // The scenario reference applies to one session only, so it doesn't carry over to the next one by mistake.
-        AppSettings.scenario = .unknown
+        if study { AppSettings.scenario = .unknown }
     }
 
     private func stopMotion() {
@@ -376,6 +441,7 @@ final class AppFlow {
         activePlan = nil
         cues = []
         heartRateLog = []
+        lastKnownHeartRate = nil
         warmUpStart = nil
         warmUpSkipped = false
         summaryNote = nil
@@ -390,3 +456,60 @@ final class AppFlow {
         sessionLogged = false
     }
 }
+
+#if DEBUG
+// MARK: - Screenshot mode (debug builds only)
+extension AppFlow {
+    /// Launch with `-demoScreen unready|warmup|confirm|ready|workout|finished` to show a screen with sample values,
+    /// e.g. `xcrun simctl launch <watch> <bundle-id> -demoScreen warmup`.
+    func loadDemoIfRequested() {
+        guard let screen = UserDefaults.standard.string(forKey: "demoScreen") else { return }
+        demoMode = true
+        workout = .outdoorRun
+        let demoPlan = planner.plan(exercises: [.marchInPlace, .armCircles], durationMinutes: 5, adjustments: [])
+        let hr: (Double) -> HeartRateSample = { HeartRateSample(date: .now, bpm: $0) }
+        switch screen {
+        case "unready":
+            plan = demoPlan
+            message = "Your heart rate is still 72 bpm, below the ready zone (126–150 bpm), and you only slept 5.3 hours last night. Let’s do a 5-minute warm-up first (March in Place + Arm Circles) so your muscles don’t cramp."
+            lastKnownHeartRate = hr(72)
+            phase = .unready
+        case "warmup":
+            plan = demoPlan
+            activePlan = demoPlan
+            stepIndex = 0
+            stepProgress = 32
+            lastKnownHeartRate = hr(104)
+            phase = .warmingUp
+        case "confirm":
+            lastKnownHeartRate = hr(118)
+            phase = .confirming
+        case "ready":
+            message = "Warm-up done! Heart rate 128 bpm is in the ready zone. Enjoy your outdoor run!"
+            lastKnownHeartRate = hr(128)
+            phase = .ready
+        case "workout":
+            lastKnownHeartRate = hr(142)
+            phase = .workout
+        case "finished":
+            summaryNote = "5-minute warm-up: HR rose from 72 to 128 bpm, reached the ready zone in 4 min."
+            phase = .finished
+        case "fail-hr": phase = .failed(.noHeartRate)
+        case "fail-health": phase = .failed(.healthAccess)
+        case "fail-motion": phase = .failed(.motionUnavailable)
+        case "endtest":
+            // Simulates a finished workout and logs it, to check that the history reaches the iPhone.
+            let zones = HeartRateZones(physiology: UserPhysiology(age: 30, restingHR: 65))
+            assessment = readiness.evaluate(ReadinessInput(currentHR: hr(72), history: [], recentActiveEnergy: nil, zones: zones, now: .now))
+            warmUpStart = .now
+            warmUpCompleted = true
+            finalConfirmed = true
+            summaryNote = "5-minute warm-up: HR rose from 72 to 128 bpm, reached the ready zone in 4 min."
+            phase = .finished
+            logSession(references: [:])
+        default:
+            break
+        }
+    }
+}
+#endif

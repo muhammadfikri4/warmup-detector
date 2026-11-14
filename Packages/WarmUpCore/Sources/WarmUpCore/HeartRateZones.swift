@@ -33,6 +33,24 @@ public struct ZoneConfiguration: Codable, Sendable, Equatable {
     public static let standard = ZoneConfiguration()
 }
 
+/// A sport's ready zone set on the iPhone, in bpm. `nil` = calculated from age and resting heart rate.
+public struct ZoneBaseline: Codable, Sendable, Equatable {
+    public var startBPM: Int?
+    public var endBPM: Int?
+
+    public init(startBPM: Int? = nil, endBPM: Int? = nil) {
+        self.startBPM = startBPM
+        self.endBPM = endBPM
+    }
+
+    public var isAutomatic: Bool { startBPM == nil && endBPM == nil }
+    public var isValid: Bool {
+        guard let s = startBPM, let e = endBPM else { return true }
+        return e > s
+    }
+    public static let bpmChoices = Array(stride(from: 80, through: 190, by: 5))
+}
+
 /// The user's personal dynamic HR threshold.
 public struct HeartRateZones: Codable, Sendable, Equatable {
     public let maxHR: Double
@@ -62,6 +80,25 @@ public struct HeartRateZones: Codable, Sendable, Equatable {
         self.lowerBound = target(configuration.lowerIntensity)
         self.upperBound = target(configuration.upperIntensity)
         self.warmBound = min(rhr + configuration.warmIntensity * reserve, target(configuration.lowerIntensity))
+    }
+
+    private init(maxHR: Double, restingHR: Double, lowerBound: Double, upperBound: Double, warmBound: Double) {
+        self.maxHR = maxHR
+        self.restingHR = restingHR
+        self.lowerBound = lowerBound
+        self.upperBound = upperBound
+        self.warmBound = warmBound
+    }
+
+    /// Applies a per-sport baseline set on the iPhone. Unset ends keep the calculated value;
+    /// an invalid range (end ≤ start) is ignored.
+    public func overriding(_ baseline: ZoneBaseline?) -> HeartRateZones {
+        guard let baseline, !baseline.isAutomatic else { return self }
+        let lower = baseline.startBPM.map(Double.init) ?? lowerBound
+        let upper = baseline.endBPM.map(Double.init) ?? upperBound
+        guard upper > lower else { return self }
+        return HeartRateZones(maxHR: maxHR, restingHR: restingHR, lowerBound: lower, upperBound: upper,
+                              warmBound: min(warmBound, lower))
     }
 
     public func isInReadyZone(_ bpm: Double) -> Bool { bpm >= lowerBound }

@@ -21,14 +21,52 @@ final class PhoneConnector: NSObject {
 
     // MARK: Send to iPhone
 
+    // Anything sent before the session is active waits in a persistent outbox and goes out on activation.
+    // (Once handed to WatchConnectivity, the system keeps retrying on its own.)
+    private static let outboxLinesKey = "outboxSessionLines"
+    private static let outboxFilesKey = "outboxTrainingFiles"
+
     func sendTrainingFile(_ url: URL) {
-        guard isActivated else { return }
+        guard isActivated else {
+            Self.appendOutbox(url.path, key: Self.outboxFilesKey)
+            return
+        }
         WCSession.default.transferFile(url, metadata: [SyncKey.kind: SyncKey.training, SyncKey.fileName: url.lastPathComponent])
     }
 
     func sendSessionLine(_ line: String) {
-        guard isActivated else { return }
-        WCSession.default.transferUserInfo([SyncKey.kind: SyncKey.session, SyncKey.data: line])
+        guard isActivated else {
+            Self.appendOutbox(line, key: Self.outboxLinesKey)
+            return
+        }
+        // Direct message when the iPhone app is reachable (arrives at once); otherwise the system queue.
+        // The iPhone ignores duplicates, so the fallback after a failed message is safe.
+        let payload: [String: Any] = [SyncKey.kind: SyncKey.session, SyncKey.data: line]
+        guard WCSession.default.isReachable else {
+            WCSession.default.transferUserInfo(payload)
+            return
+        }
+        WCSession.default.sendMessage(payload, replyHandler: nil) { _ in
+            WCSession.default.transferUserInfo([SyncKey.kind: SyncKey.session, SyncKey.data: line])
+        }
+    }
+
+    private func flushOutbox() {
+        let defaults = UserDefaults.standard
+        let lines = defaults.stringArray(forKey: Self.outboxLinesKey) ?? []
+        let files = defaults.stringArray(forKey: Self.outboxFilesKey) ?? []
+        defaults.removeObject(forKey: Self.outboxLinesKey)
+        defaults.removeObject(forKey: Self.outboxFilesKey)
+        lines.forEach(sendSessionLine)
+        files.map { URL(fileURLWithPath: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+            .forEach(sendTrainingFile)
+    }
+
+    private static func appendOutbox(_ value: String, key: String) {
+        var items = UserDefaults.standard.stringArray(forKey: key) ?? []
+        items.append(value)
+        UserDefaults.standard.set(Array(items.suffix(500)), forKey: key)
     }
 
     func reportStatus() {
@@ -47,6 +85,7 @@ final class PhoneConnector: NSObject {
         isActivated = true
         if let context { applySettings(context) }
         reportStatus()
+        flushOutbox()
     }
 
     private func applySettings(_ data: Data) {

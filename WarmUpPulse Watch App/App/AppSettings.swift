@@ -13,6 +13,8 @@ enum AppSettings {
         static let consent = "studyConsent"
         static let scenario = "studyScenario"
         static let autoCollect = "autoCollect"
+        static let moveTargets = "moveTargets"
+        static let sportZones = "sportZones"
         static let settingsUpdatedAt = "settingsUpdatedAt"
     }
 
@@ -41,6 +43,8 @@ enum AppSettings {
         defaults.set(s.consent, forKey: Key.consent)
         defaults.set(s.scenario.rawValue, forKey: Key.scenario)
         defaults.set(s.autoCollect, forKey: Key.autoCollect)
+        defaults.set(try? JSONEncoder().encode(s.moveTargets), forKey: Key.moveTargets)
+        defaults.set(try? JSONEncoder().encode(s.sportZones), forKey: Key.sportZones)
         defaults.set(s.updatedAt.timeIntervalSinceReferenceDate, forKey: Key.settingsUpdatedAt)
     }
 
@@ -56,6 +60,15 @@ enum AppSettings {
 
     static var useAppleIntelligence: Bool { defaults.bool(forKey: Key.useAppleIntelligence) }
     static var voiceGuidance: Bool { defaults.bool(forKey: Key.voiceGuidance) }
+    /// Ready-zone baseline for a sport set on the iPhone; automatic when nothing is set.
+    static func zoneBaseline(for workout: WorkoutKind) -> ZoneBaseline {
+        let all = defaults.data(forKey: Key.sportZones).flatMap { try? JSONDecoder().decode([String: ZoneBaseline].self, from: $0) }
+        return all?[workout.rawValue] ?? ZoneBaseline()
+    }
+    /// Reps / seconds per move set on the iPhone; automatic when nothing is set.
+    static var moveTargets: MoveTargets {
+        defaults.data(forKey: Key.moveTargets).flatMap { try? JSONDecoder().decode(MoveTargets.self, from: $0) } ?? MoveTargets()
+    }
     static var zoneConfiguration: ZoneConfiguration {
         let method = defaults.string(forKey: Key.zoneMethod).flatMap(ZoneMethod.init) ?? .karvonen
         return ZoneConfiguration(method: method)

@@ -12,12 +12,20 @@ public struct CompanionSettings: Codable, Sendable, Equatable {
     public var scenario: ReferenceScenario = .unknown
     /// Automatically save guided warm-up sensor data as training data (requires consent).
     public var autoCollect = false
+    /// Reps / seconds per move set on the iPhone (nil = automatic).
+    public var moveTargets = MoveTargets()
+    /// Ready-zone baseline per sport, keyed by `WorkoutKind.rawValue` (missing = automatic).
+    public var sportZones: [String: ZoneBaseline] = [:]
     public var updatedAt = Date(timeIntervalSince1970: 0)
 
     public init() {}
 
+    public func zoneBaseline(for workout: WorkoutKind) -> ZoneBaseline {
+        sportZones[workout.rawValue] ?? ZoneBaseline()
+    }
+
     private enum CodingKeys: String, CodingKey {
-        case useAppleIntelligence, voiceGuidance, zoneMethod, studyMode, participant, wrist, consent, scenario, autoCollect, updatedAt
+        case useAppleIntelligence, voiceGuidance, zoneMethod, studyMode, participant, wrist, consent, scenario, autoCollect, moveTargets, sportZones, updatedAt
     }
 
     /// Missing keys (settings saved by an older version) fall back to defaults.
@@ -33,6 +41,8 @@ public struct CompanionSettings: Codable, Sendable, Equatable {
         consent = try c.decodeIfPresent(Bool.self, forKey: .consent) ?? d.consent
         scenario = try c.decodeIfPresent(ReferenceScenario.self, forKey: .scenario) ?? d.scenario
         autoCollect = try c.decodeIfPresent(Bool.self, forKey: .autoCollect) ?? d.autoCollect
+        moveTargets = try c.decodeIfPresent(MoveTargets.self, forKey: .moveTargets) ?? d.moveTargets
+        sportZones = try c.decodeIfPresent([String: ZoneBaseline].self, forKey: .sportZones) ?? d.sportZones
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? d.updatedAt
     }
 

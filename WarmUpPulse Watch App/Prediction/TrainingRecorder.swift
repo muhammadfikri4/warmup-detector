@@ -93,8 +93,7 @@ final class TrainingRecorder {
             let url = Self.directory.appending(path: "\(name.session).csv")
             try MotionCSV.encode(frames, name: name).write(to: url, atomically: true, encoding: .utf8)
             PhoneConnector.shared.sendTrainingFile(url)
-            let warning = quality.rejectionReason().map { " ⚠︎ \($0)" } ?? ""
-            state = .saved(String(format: "%@ · %d samples · %.0f Hz%@", name.session, quality.sampleCount, quality.effectiveHz, warning))
+            state = .saved(quality.rejectionReason().map { "Saved, but it may not be usable: \($0)" } ?? "Saved and sent to iPhone")
         } catch {
             state = .failed(error.localizedDescription)
         }

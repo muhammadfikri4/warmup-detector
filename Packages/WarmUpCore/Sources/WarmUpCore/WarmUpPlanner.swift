@@ -20,6 +20,53 @@ public struct WarmUpPlan: Codable, Sendable, Equatable {
     }
 
     public var exerciseListText: String { steps.map(\.exercise.displayName).joined(separator: " + ") }
+
+    /// Replaces automatic targets with the ones set on the iPhone. The plan length follows the new targets.
+    public func applying(_ targets: MoveTargets) -> WarmUpPlan {
+        guard !targets.isAutomatic else { return self }
+        let newSteps = steps.map { step in
+            targets.target(for: step.exercise).map { WarmUpStep(exercise: step.exercise, target: $0) } ?? step
+        }
+        let seconds = newSteps.reduce(0) { $0 + $1.estimatedSeconds }
+        return WarmUpPlan(steps: newSteps, durationMinutes: max(1, Int((seconds / 60).rounded(.up))), adjustments: adjustments)
+    }
+}
+
+/// Per-move targets set on the iPhone. `nil` = automatic (sized from the 3–5 minute plan).
+public struct MoveTargets: Codable, Sendable, Equatable {
+    public var armCirclesReps: Int?
+    public var torsoTwistReps: Int?
+    public var marchInPlaceSeconds: Int?
+
+    public init(armCirclesReps: Int? = nil, torsoTwistReps: Int? = nil, marchInPlaceSeconds: Int? = nil) {
+        self.armCirclesReps = armCirclesReps
+        self.torsoTwistReps = torsoTwistReps
+        self.marchInPlaceSeconds = marchInPlaceSeconds
+    }
+
+    public var isAutomatic: Bool { armCirclesReps == nil && torsoTwistReps == nil && marchInPlaceSeconds == nil }
+
+    public func target(for exercise: Exercise) -> ExerciseTarget? {
+        switch exercise {
+        case .armCircles: armCirclesReps.map { .reps($0) }
+        case .torsoTwist: torsoTwistReps.map { .reps($0) }
+        case .marchInPlace: marchInPlaceSeconds.map { .duration(TimeInterval($0)) }
+        }
+    }
+
+    /// Choices offered on the iPhone.
+    public static let repChoices = [5, 10, 15, 20, 25, 30, 40, 50]
+    public static let secondChoices = [30, 45, 60, 90, 120, 180]
+}
+
+extension WarmUpStep {
+    /// Rough time a step takes, used to show the plan length.
+    public var estimatedSeconds: Double {
+        switch target {
+        case .reps(let n): Double(n) * (exercise.secondsPerRep ?? 2)
+        case .duration(let s): s
+        }
+    }
 }
 
 /// Deterministic planner. Used directly as the fallback, and as the validator/target calculator

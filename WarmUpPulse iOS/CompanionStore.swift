@@ -14,6 +14,8 @@ final class CompanionStore {
 
     private(set) var isTraining = false
     private(set) var trainingReport: String?
+    /// Structured result of the last Retrain, shown as cards and charts.
+    private(set) var lastTraining: TrainingResult?
     /// A new model that PASSED evaluation and is ready to send.
     private(set) var candidate: SoftmaxModel?
     var message: String?
@@ -68,6 +70,9 @@ final class CompanionStore {
     }
 
     private func receiveSessionLine(_ line: String) {
+        // The same session can arrive twice (direct message + queued fallback): keep one copy.
+        guard let entry = SessionLogEntry.decodeLines(line).entries.first,
+              !loadSessions().contains(where: { $0.id == entry.id }) else { return }
         let fm = FileManager.default
         try? fm.createDirectory(at: CompanionPaths.sessions.deletingLastPathComponent(), withIntermediateDirectories: true)
         let data = Data((line + "\n").utf8)
@@ -89,13 +94,25 @@ final class CompanionStore {
         return SessionLogEntry.decodeLines(text).entries.filter { seen.insert($0.id).inserted }
     }
 
+    /// Every finished workout reported by the watch (deduplicated).
+    var allSessions: [SessionLogEntry] {
+        _ = sessionCount // observe: recompute when a new log arrives
+        return loadSessions()
+    }
+
+    /// Latest finished workouts reported by the watch, newest first.
+    var recentSessions: [SessionLogEntry] {
+        _ = sessionCount // observe: recompute when a new log arrives
+        return Array(loadSessions().suffix(20).reversed())
+    }
+
     var participantsInData: [String] { Set(recordings.compactMap(\.participant)).sorted() }
 
     func counts(for participant: String) -> [(label: String, manual: Int, auto: Int)] {
         let mine = recordings.filter { $0.participant == participant }
         return MotionLabel.allCases.map { label in
             let items = mine.filter { MotionLabel(classLabel: $0.label) == label }
-            return (label.rawValue, items.filter { !$0.isAuto }.count, items.filter(\.isAuto).count)
+            return (label.exercise?.displayName ?? (label == .idle ? "Standing still" : "Other movement"), items.filter { !$0.isAuto }.count, items.filter(\.isAuto).count)
         }
     }
 
@@ -118,6 +135,7 @@ final class CompanionStore {
         isTraining = true
         candidate = nil
         trainingReport = nil
+        lastTraining = nil
         let urls = recordings.map { CompanionPaths.training.appending(path: "\($0.session).csv") }
         let current = activeModel
         let golden = goldenParticipants
@@ -127,6 +145,7 @@ final class CompanionStore {
                 Self.runTraining(urls: urls, current: current, golden: golden)
             }.value
             trainingReport = result.formatted()
+            lastTraining = result
             candidate = result.promote ? result.model : nil
             isTraining = false
         }
