@@ -1,7 +1,7 @@
 import SwiftUI
 import WarmUpCore
 
-/// Identitas samaran + consent (diatur di iPhone; watch hanya menampilkan).
+/// Pseudonymous ID + consent (set on iPhone; the watch only displays them).
 struct ParticipantSection: View {
     @AppStorage(AppSettings.Key.participant) private var participant = Participant.codes[0]
     @AppStorage(AppSettings.Key.wrist) private var wrist = Wrist.left.rawValue
@@ -9,13 +9,13 @@ struct ParticipantSection: View {
 
     var body: some View {
         Section {
-            LabeledContent("Partisipan", value: participant)
-            LabeledContent("Pergelangan", value: Wrist(rawValue: wrist)?.displayName ?? wrist)
-            LabeledContent("Persetujuan", value: consent ? "✓ Setuju" : "✗ Belum")
+            LabeledContent("Participant", value: participant)
+            LabeledContent("Wrist", value: Wrist(rawValue: wrist)?.displayName ?? wrist)
+            LabeledContent("Consent", value: consent ? "✓ Given" : "✗ Not yet")
         } header: {
-            Text("Partisipan")
+            Text("Participant")
         } footer: {
-            if !consent { Text("Centang persetujuan partisipan di app iPhone.") }
+            if !consent { Text("Give participant consent in the iPhone app.") }
         }
     }
 }
@@ -32,7 +32,7 @@ struct RecorderView: View {
                 ProgressView()
             }
         }
-        .navigationTitle("Rekam Data")
+        .navigationTitle("Record Data")
         .onAppear { if recorder == nil { recorder = TrainingRecorder(store: flow.health.store) } }
         .onDisappear { recorder?.cancel() }
     }
@@ -51,22 +51,22 @@ private struct RecorderContent: View {
             VStack(spacing: 6) {
                 Text(recorder.label.rawValue).font(.headline)
                 Text("\(remaining)").font(Theme.counter).monospacedDigit()
-                Button("Batal", role: .destructive) { recorder.cancel() }
+                Button("Cancel", role: .destructive) { recorder.cancel() }
             }
         case .idle, .saved, .failed:
             Form {
                 ParticipantSection()
-                Section("Rekaman") {
+                Section("Recording") {
                     Picker("Label", selection: $recorder.label) {
                         ForEach(MotionLabel.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
-                    Stepper("Durasi \(recorder.durationSeconds) dtk", value: $recorder.durationSeconds, in: 10...120, step: 10)
-                    Button("Rekam") { recorder.start() }
+                    Stepper("Duration \(recorder.durationSeconds)s", value: $recorder.durationSeconds, in: 10...120, step: 10)
+                    Button("Record") { recorder.start() }
                         .tint(Theme.warm)
                         .disabled(!consent)
                 }
                 Section {
-                    if case .saved(let info) = recorder.state { Text("Tersimpan: \(info)").font(.footnote) }
+                    if case .saved(let info) = recorder.state { Text("Saved: \(info)").font(.footnote) }
                     if case .failed(let error) = recorder.state { Text(error).font(.footnote).foregroundStyle(.red) }
                     let counts = recorder.countsForCurrentParticipant()
                     ForEach(MotionLabel.allCases, id: \.self) { label in
@@ -74,16 +74,16 @@ private struct RecorderContent: View {
                             .font(.footnote)
                     }
                 } header: {
-                    Text("Rekaman \(participant)")
+                    Text("Recordings · \(participant)")
                 } footer: {
-                    Text("Target ≥ 5 sesi per label per partisipan, dari beberapa orang & kedua pergelangan.")
+                    Text("Aim for ≥ 5 sessions per label per participant, from several people & both wrists.")
                 }
             }
         }
     }
 }
 
-/// Status Mode Studi (diatur di iPhone): skenario referensi ditentukan peneliti SEBELUM menekan Start.
+/// Study Mode status (set on iPhone): the researcher picks the reference scenario BEFORE pressing Start.
 struct StudySettingsSection: View {
     @AppStorage(AppSettings.Key.studyMode) private var studyMode = false
     @AppStorage(AppSettings.Key.scenario) private var scenario = ReferenceScenario.unknown.rawValue
@@ -91,20 +91,20 @@ struct StudySettingsSection: View {
 
     var body: some View {
         Section {
-            LabeledContent("Mode Studi", value: studyMode ? "Aktif" : "Mati")
+            LabeledContent("Study Mode", value: studyMode ? "On" : "Off")
             if studyMode {
-                LabeledContent("Skenario", value: ReferenceScenario(rawValue: scenario)?.displayName ?? scenario)
-                LabeledContent("Log tersimpan", value: "\(SessionLogger.count) sesi")
+                LabeledContent("Scenario", value: ReferenceScenario(rawValue: scenario)?.displayName ?? scenario)
+                LabeledContent("Logged sessions", value: "\(SessionLogger.count)")
             }
-            LabeledContent("Rekam otomatis", value: autoCollect ? "Aktif" : "Mati")
+            LabeledContent("Auto-record", value: autoCollect ? "On" : "Off")
         } header: {
-            Text("Evaluasi & data")
+            Text("Evaluation & Data")
         }
         if studyMode || autoCollect { ParticipantSection() }
     }
 }
 
-/// Input hitungan manual peneliti (referensi) untuk gerakan berbasis repetisi.
+/// Researcher's manual count input (reference) for rep-based exercises.
 struct ReferenceCountsSection: View {
     let steps: [StepLog]
     @Binding var references: [Int: Int]
@@ -123,9 +123,9 @@ struct ReferenceCountsSection: View {
                 }
             }
         } header: {
-            Text("Hitungan manual")
+            Text("Manual count")
         } footer: {
-            Text("Isi sesuai hitungan peneliti/video sebagai referensi.")
+            Text("Enter the researcher/video count as the reference.")
         }
     }
 }

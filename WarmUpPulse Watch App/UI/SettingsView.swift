@@ -1,7 +1,7 @@
 import SwiftUI
 import WarmUpCore
 
-/// Pengaturan di watch hanya ditampilkan; semua diubah dari app iPhone lalu disinkronkan.
+/// Settings are read-only on the watch; everything is changed in the iPhone app and synced.
 struct SettingsView: View {
     @Environment(AppFlow.self) private var flow
     @AppStorage(AppSettings.Key.useAppleIntelligence) private var useAI = true
@@ -12,23 +12,26 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                Label("Diatur dari iPhone", systemImage: "iphone")
+                Label("Managed from iPhone", systemImage: "iphone")
             } footer: {
                 Text(updatedAt > 0
-                     ? "Sinkron terakhir: \(Date(timeIntervalSinceReferenceDate: updatedAt).formatted(date: .abbreviated, time: .shortened))"
-                     : "Belum pernah sinkron — memakai pengaturan bawaan.")
+                     ? "Last synced: \(Date(timeIntervalSinceReferenceDate: updatedAt).formatted(date: .abbreviated, time: .shortened))"
+                     : "Never synced — using default settings.")
             }
-            Section("Pelatih") {
-                LabeledContent("Apple Intelligence", value: useAI ? "Aktif" : "Mati")
-                LabeledContent("Status AI", value: flow.coach.availabilityText)
-                LabeledContent("Panduan suara", value: voice ? "Aktif" : "Mati")
-                LabeledContent("Zona HR", value: ZoneMethod(rawValue: zoneMethod)?.displayName ?? zoneMethod)
+            Section("Coach") {
+                LabeledContent("Apple Intelligence", value: useAI ? "On" : "Off")
+                LabeledContent("AI Status", value: flow.coach.availabilityText)
+                LabeledContent("Voice guidance", value: voice ? "On" : "Off")
+                if voice {
+                    LabeledContent("Voice", value: SpeechCoach.voiceDescription)
+                }
+                LabeledContent("HR zone", value: ZoneMethod(rawValue: zoneMethod)?.displayName ?? zoneMethod)
             }
             StudySettingsSection()
-            Section("Classifier gerakan") {
+            Section("Motion classifier") {
                 Text(ClassifierFactory.activeClassifierName).font(.footnote)
             }
         }
-        .navigationTitle("Pengaturan")
+        .navigationTitle("Settings")
     }
 }

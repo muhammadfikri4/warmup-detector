@@ -1,15 +1,15 @@
 import Foundation
 import WarmUpCore
 
-/// Menyambungkan sampel 50 Hz → sliding window 2 detik → classifier → GuidedWarmUpEngine.
-/// Seluruh pemrosesan berjalan di antrean serial MotionSampler (bukan main thread) agar
-/// latensi inferensi + umpan balik tetap < 200 ms (NFR-02). Hasil dikirim ke UI lewat `onUpdate`.
+/// Connects 50 Hz samples → 2-second sliding window → classifier → GuidedWarmUpEngine.
+/// All processing runs on MotionSampler's serial queue (not the main thread) so
+/// inference + feedback latency stays < 200 ms (NFR-02). Results reach the UI via `onUpdate`.
 nonisolated final class MotionPipeline: @unchecked Sendable {
     struct Update: Sendable {
         var events: [GuidedWarmUpEngine.Event]
         var prediction: MotionPrediction?
         var inferenceMilliseconds: Double?
-        /// Data sensor satu gerakan yang selesai (untuk rekaman otomatis), di luar periode dijeda.
+        /// Sensor data for one completed exercise (for auto-recording), excluding paused periods.
         var completedStep: (exercise: Exercise, frames: [MotionFrame])?
     }
 
@@ -25,13 +25,13 @@ nonisolated final class MotionPipeline: @unchecked Sendable {
         self.engine = GuidedWarmUpEngine(plan: plan)
         self.collectFrames = collectFrames
         self.classifier = classifier
-        self.window = SlidingWindow(size: classifier.windowSize, hop: 25) // inferensi tiap 0,5 detik
+        self.window = SlidingWindow(size: classifier.windowSize, hop: 25) // inference every 0.5 seconds
         self.onUpdate = onUpdate
     }
 
     func process(_ frame: MotionFrame) {
         var update = Update(events: [], prediction: nil, inferenceMilliseconds: nil, completedStep: nil)
-        // Label rekaman otomatis = gerakan yang diinstruksikan; periode dijeda (diam) tidak ikut.
+        // Auto-recording label = the instructed exercise; paused (idle) periods are left out.
         if collectFrames, !engine.isPaused { stepFrames.append(frame) }
         if let samples = window.append(frame) {
             let started = DispatchTime.now().uptimeNanoseconds
@@ -52,7 +52,7 @@ nonisolated final class MotionPipeline: @unchecked Sendable {
     }
 }
 
-/// Mengukur intensitas gerak selama pengecekan awal (≈ 2 detik) — konteks tambahan untuk penjelasan.
+/// Measures motion intensity during the initial check (≈ 2 seconds) — extra context for the explanation.
 nonisolated final class MotionIntensityMeter: @unchecked Sendable {
     private var frames: [MotionFrame] = []
     private let lock = NSLock()

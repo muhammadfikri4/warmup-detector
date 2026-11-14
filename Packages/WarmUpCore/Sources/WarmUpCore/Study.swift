@@ -1,15 +1,15 @@
 import Foundation
 
-// Pipeline tahap 1 (Collect) — identitas samaran, consent, dan log sesi untuk evaluasi.
+// Pipeline stage 1 (Collect) — pseudonymous identity, consent, and session logs for evaluation.
 
 public enum Wrist: String, Codable, Sendable, CaseIterable {
     case left = "L"
     case right = "R"
 
-    public var displayName: String { self == .left ? "Kiri" : "Kanan" }
+    public var displayName: String { self == .left ? "Left" : "Right" }
 }
 
-/// Kode partisipan samaran (P01…P30). Nama asli TIDAK pernah disimpan di jam maupun di data.
+/// Pseudonymous participant codes (P01…P30). Real names are NEVER stored on the watch or in the data.
 public enum Participant {
     public static let codes = (1...30).map { String(format: "P%02d", $0) }
 
@@ -18,8 +18,8 @@ public enum Participant {
     }
 }
 
-/// Konvensi nama berkas rekaman: `<label>_<partisipan>_<pergelangan>_<epoch>.csv`,
-/// mis. `armCircles_P03_L_1731550000.csv`. Format lama `<label>_<epoch>.csv` tetap terbaca (tanpa partisipan).
+/// Recording file name convention: `<label>_<participant>_<wrist>_<epoch>.csv`,
+/// e.g. `armCircles_P03_L_1731550000.csv`. The legacy `<label>_<epoch>.csv` format is still read (no participant).
 public struct RecordingName: Sendable, Equatable {
     public var label: String
     public var participant: String?
@@ -49,7 +49,7 @@ public struct RecordingName: Sendable, Equatable {
     }
 }
 
-/// Format CSV data latih — satu sumber kebenaran untuk perekam (jam) dan script training (Mac).
+/// Training data CSV format — single source of truth for the recorder (watch) and the training script (Mac).
 public enum MotionCSV {
     public static let header = "session,participant,wrist,timestamp,acc_x,acc_y,acc_z,rot_x,rot_y,rot_z,grav_x,grav_y,grav_z,label"
 
@@ -65,7 +65,7 @@ public enum MotionCSV {
         ([header] + frames.map { row($0, name: name) }).joined(separator: "\n") + "\n"
     }
 
-    /// Membaca CSV berdasarkan nama kolom (urutan bebas; format lama tanpa participant/wrist juga didukung).
+    /// Reads CSV by column name (any order; the legacy format without participant/wrist is also supported).
     public static func decode(_ text: String) -> [MotionFrame] {
         var lines = text.split(whereSeparator: \.isNewline).makeIterator()
         guard let headerLine = lines.next() else { return [] }
@@ -89,19 +89,19 @@ public enum MotionCSV {
     }
 }
 
-/// Referensi kebenaran untuk evaluasi kesiapan, ditentukan peneliti SEBELUM sesi (skenario terkontrol PRD §5).
+/// Ground-truth reference for readiness evaluation, set by the researcher BEFORE the session (controlled scenarios, PRD §5).
 public enum ReferenceScenario: String, Codable, Sendable, CaseIterable {
     case unknown
-    /// Duduk diam ≥ 5 menit sebelum Start → seharusnya "Belum Pemanasan".
+    /// Sitting still ≥ 5 minutes before Start → should be "Not ready".
     case cold
-    /// Jalan cepat ≥ 6 menit sebelum Start → seharusnya "Siap".
+    /// Brisk walking ≥ 6 minutes before Start → should be "Ready".
     case warm
 
     public var displayName: String {
         switch self {
-        case .unknown: "Tidak diketahui"
-        case .cold: "Dingin (duduk 5 mnt)"
-        case .warm: "Hangat (jalan cepat 6 mnt)"
+        case .unknown: "Unknown"
+        case .cold: "Cold (seated 5 min)"
+        case .warm: "Warm (brisk walk 6 min)"
         }
     }
 
@@ -115,21 +115,21 @@ public enum ReferenceScenario: String, Codable, Sendable, CaseIterable {
 }
 
 public enum WarmUpOutcome: String, Codable, Sendable {
-    /// Sudah siap saat Start, tidak perlu pemanasan.
+    /// Already ready at Start, no warm-up needed.
     case notNeeded
     case skipped
     case completed
-    /// Sesi dibatalkan sebelum selesai.
+    /// Session cancelled before finishing.
     case abandoned
 }
 
 public struct StepLog: Codable, Sendable, Equatable {
     public var exercise: Exercise
     public var target: ExerciseTarget
-    /// Repetisi atau detik aktif yang dihitung aplikasi.
+    /// Reps or active seconds counted by the app.
     public var counted: Double
     public var completed: Bool
-    /// Hitungan manual peneliti (referensi), hanya untuk gerakan berbasis repetisi.
+    /// Researcher's manual count (reference), only for rep-based exercises.
     public var referenceReps: Int?
 
     public init(exercise: Exercise, target: ExerciseTarget, counted: Double, completed: Bool, referenceReps: Int? = nil) {
@@ -141,7 +141,7 @@ public struct StepLog: Codable, Sendable, Equatable {
     }
 }
 
-/// Satu baris log evaluasi (JSON Lines). Hanya ditulis saat Mode Studi aktif.
+/// One evaluation log line (JSON Lines). Only written while Study Mode is on.
 public struct SessionLogEntry: Codable, Sendable, Equatable {
     public var id: UUID
     public var date: Date

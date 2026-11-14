@@ -9,10 +9,10 @@ struct WarmUpPulseCompanionApp: App {
     var body: some Scene {
         WindowGroup {
             TabView {
-                Tab("Pengaturan", systemImage: "gearshape") { SettingsScreen() }
+                Tab("Settings", systemImage: "gearshape") { SettingsScreen() }
                 Tab("Data", systemImage: "tray.full") { DataScreen() }
                 Tab("Model", systemImage: "brain") { ModelScreen() }
-                Tab("Evaluasi", systemImage: "checkmark.seal") { EvaluationScreen() }
+                Tab("Evaluation", systemImage: "checkmark.seal") { EvaluationScreen() }
             }
             .environment(store)
             .onChange(of: scenePhase) { _, phase in
@@ -30,7 +30,7 @@ struct WarmUpPulseCompanionApp: App {
     }
 }
 
-// MARK: - Pengaturan (sumber kebenaran; disinkronkan ke watch)
+// MARK: - Settings (source of truth; synced to the watch)
 
 struct SettingsScreen: View {
     @Environment(CompanionStore.self) private var store
@@ -42,59 +42,59 @@ struct SettingsScreen: View {
 
                 Section {
                     Toggle("Apple Intelligence", isOn: store.binding(\.useAppleIntelligence))
-                    Toggle("Panduan suara", isOn: store.binding(\.voiceGuidance))
-                    Picker("Zona HR", selection: store.binding(\.zoneMethod)) {
+                    Toggle("Voice guidance", isOn: store.binding(\.voiceGuidance))
+                    Picker("HR zone", selection: store.binding(\.zoneMethod)) {
                         ForEach(ZoneMethod.allCases, id: \.self) { Text($0.displayName).tag($0) }
                     }
                 } header: {
-                    Text("Pelatih")
+                    Text("Coach")
                 } footer: {
-                    Text("Di watchOS, Apple Intelligence diproses lewat Private Cloud Compute Apple; hanya angka ringkas yang dikirim. Zona siap = 50–70% dari metode yang dipilih.")
+                    Text("On watchOS, Apple Intelligence runs via Apple's Private Cloud Compute; only summary numbers are sent. Ready zone = 50–70% of the selected method. Voice guidance uses the best English system voice installed on the watch (Siri voices aren't available to third-party apps).")
                 }
 
                 Section {
-                    Picker("Partisipan", selection: store.binding(\.participant)) {
+                    Picker("Participant", selection: store.binding(\.participant)) {
                         ForEach(Participant.codes, id: \.self) { Text($0).tag($0) }
                     }
-                    Picker("Pergelangan", selection: store.binding(\.wrist)) {
+                    Picker("Wrist", selection: store.binding(\.wrist)) {
                         ForEach(Wrist.allCases, id: \.self) { Text($0.displayName).tag($0) }
                     }
                     .pickerStyle(.segmented)
-                    Toggle("Partisipan setuju (consent)", isOn: store.binding(\.consent))
+                    Toggle("Participant consent", isOn: store.binding(\.consent))
                 } header: {
-                    Text("Partisipan")
+                    Text("Participant")
                 } footer: {
-                    Text("Pakai kode samaran, bukan nama. Mengganti partisipan otomatis mencabut persetujuan.")
+                    Text("Use a pseudonymous code, not a name. Changing the participant automatically revokes consent.")
                 }
 
                 Section {
-                    Toggle("Mode Studi", isOn: store.binding(\.studyMode))
+                    Toggle("Study Mode", isOn: store.binding(\.studyMode))
                     if store.settings.studyMode {
-                        Picker("Skenario sesi berikutnya", selection: store.binding(\.scenario)) {
+                        Picker("Next session scenario", selection: store.binding(\.scenario)) {
                             ForEach(ReferenceScenario.allCases, id: \.self) { Text($0.displayName).tag($0) }
                         }
                     }
                 } header: {
-                    Text("Evaluasi kesiapan")
+                    Text("Readiness evaluation")
                 } footer: {
-                    Text("Pilih skenario sebelum partisipan menekan Start di watch. Setelah sesi tercatat, skenario kembali ke \"Tidak diketahui\".")
+                    Text("Pick a scenario before the participant taps Start on the watch. Once the session is logged, the scenario resets to \"Unknown\".")
                 }
 
                 Section {
-                    Toggle("Rekam otomatis saat pemanasan", isOn: store.binding(\.autoCollect))
+                    Toggle("Auto-record during warm-up", isOn: store.binding(\.autoCollect))
                         .disabled(!store.settings.consent)
                     if !store.settings.consent {
-                        Label("Nyalakan \"Partisipan setuju (consent)\" di bagian Partisipan dulu.", systemImage: "lock.fill")
+                        Label("Turn on \"Participant consent\" in the Participant section first.", systemImage: "lock.fill")
                             .font(.footnote)
                             .foregroundStyle(.orange)
                     }
                 } header: {
-                    Text("Data latih otomatis")
+                    Text("Automatic training data")
                 } footer: {
-                    Text("Data sensor tiap gerakan yang selesai disimpan dengan label = gerakan yang diinstruksikan (label lemah, bobot 0,5 saat training) lalu dikirim ke iPhone. Butuh persetujuan partisipan.")
+                    Text("Sensor data from each completed movement is saved, labeled as the instructed movement (weak label, weight 0.5 in training), then sent to the iPhone. Requires participant consent.")
                 }
             }
-            .navigationTitle("Pengaturan")
+            .navigationTitle("Settings")
         }
     }
 }
@@ -105,12 +105,12 @@ struct WatchStatusSection: View {
     var body: some View {
         let c = store.connector
         Section("Apple Watch") {
-            LabeledContent("Terpasang", value: c.isPaired ? (c.isWatchAppInstalled ? "App terpasang" : "App belum terpasang") : "Tidak ada watch")
-            LabeledContent("Terjangkau", value: c.isReachable ? "Ya" : "Tidak (pesan dikirim saat tersambung)")
+            LabeledContent("Installed", value: c.isPaired ? (c.isWatchAppInstalled ? "App installed" : "App not installed") : "No watch paired")
+            LabeledContent("Reachable", value: c.isReachable ? "Yes" : "No (messages sent when connected)")
             if let status = store.watchStatus {
                 LabeledContent("Classifier", value: status.classifierName)
-                LabeledContent("Pengaturan diterapkan",
-                               value: status.settingsUpdatedAt.map { $0 >= store.settings.updatedAt.addingTimeInterval(-1) ? "Terbaru" : "Menunggu sinkron" } ?? "Belum")
+                LabeledContent("Settings applied",
+                               value: status.settingsUpdatedAt.map { $0 >= store.settings.updatedAt.addingTimeInterval(-1) ? "Up to date" : "Waiting to sync" } ?? "Not yet")
             }
         }
     }
@@ -125,24 +125,24 @@ struct DataScreen: View {
         NavigationStack {
             List {
                 if store.participantsInData.isEmpty {
-                    ContentUnavailableView("Belum ada data", systemImage: "waveform.path.ecg",
-                                           description: Text("Rekam di watch (Rekam Data Latih) atau aktifkan rekam otomatis."))
+                    ContentUnavailableView("No data yet", systemImage: "waveform.path.ecg",
+                                           description: Text("Record training data on the watch or turn on auto-record."))
                 }
                 ForEach(store.participantsInData, id: \.self) { person in
                     Section(person) {
                         ForEach(store.counts(for: person), id: \.label) { row in
-                            LabeledContent(row.label, value: "\(row.manual) manual · \(row.auto) otomatis")
+                            LabeledContent(row.label, value: "\(row.manual) manual · \(row.auto) auto")
                         }
                     }
                 }
-                Section("Log evaluasi") {
-                    LabeledContent("Sesi tercatat", value: "\(store.sessionCount)")
+                Section("Evaluation log") {
+                    LabeledContent("Sessions logged", value: "\(store.sessionCount)")
                 }
             }
             .navigationTitle("Data")
             .toolbar {
                 if !store.exportURLs.isEmpty {
-                    ShareLink(items: store.exportURLs) { Label("Ekspor", systemImage: "square.and.arrow.up") }
+                    ShareLink(items: store.exportURLs) { Label("Export", systemImage: "square.and.arrow.up") }
                 }
             }
             .refreshable { store.refreshInventory() }
@@ -150,7 +150,7 @@ struct DataScreen: View {
     }
 }
 
-// MARK: - Model (pemicu training manual)
+// MARK: - Model (manual training trigger)
 
 struct ModelScreen: View {
     @Environment(CompanionStore.self) private var store
@@ -159,21 +159,21 @@ struct ModelScreen: View {
         @Bindable var store = store
         NavigationStack {
             List {
-                Section("Model aktif di watch") {
+                Section("Active model on watch") {
                     if let model = store.activeModel {
-                        LabeledContent("Versi", value: "v\(model.version)")
-                        LabeledContent("Dilatih", value: model.info.trainedAt.formatted(date: .abbreviated, time: .shortened))
-                        LabeledContent("Data latih", value: "\(model.info.trainingWindows) jendela · \(model.info.participants.joined(separator: ", "))")
+                        LabeledContent("Version", value: "v\(model.version)")
+                        LabeledContent("Trained", value: model.info.trainedAt.formatted(date: .abbreviated, time: .shortened))
+                        LabeledContent("Training data", value: "\(model.info.trainingWindows) windows · \(model.info.participants.joined(separator: ", "))")
                         Text(model.info.evaluation).font(.footnote).foregroundStyle(.secondary)
-                        Button("Kembali ke model bawaan", role: .destructive) { store.resetModel() }
+                        Button("Revert to built-in model", role: .destructive) { store.resetModel() }
                     } else {
-                        Text("Bawaan (CoreML bila ada, selain itu heuristik)")
+                        Text("Built-in (Core ML if available, otherwise heuristic)")
                     }
                 }
 
                 Section {
                     if store.participantsInData.isEmpty {
-                        Text("Belum ada partisipan.").foregroundStyle(.secondary)
+                        Text("No participants yet.").foregroundStyle(.secondary)
                     }
                     ForEach(store.participantsInData, id: \.self) { person in
                         Toggle(person, isOn: Binding(
@@ -184,7 +184,7 @@ struct ModelScreen: View {
                 } header: {
                     Text("Golden set")
                 } footer: {
-                    Text("Partisipan terpilih dikunci khusus untuk pengujian dan TIDAK PERNAH dipakai melatih. Kosongkan untuk evaluasi leave-one-person-out.")
+                    Text("Selected participants are held out for testing only and are NEVER used for training. Leave empty for leave-one-person-out evaluation.")
                 }
 
                 Section {
@@ -192,20 +192,20 @@ struct ModelScreen: View {
                         store.train()
                     } label: {
                         if store.isTraining {
-                            HStack { ProgressView(); Text("Melatih…") }
+                            HStack { ProgressView(); Text("Training…") }
                         } else {
-                            Label("Latih Ulang", systemImage: "arrow.triangle.2.circlepath")
+                            Label("Retrain", systemImage: "arrow.triangle.2.circlepath")
                         }
                     }
                     .disabled(store.isTraining || store.recordings.isEmpty)
                 } footer: {
-                    Text("Clean → fitur → logistic regression → evaluasi pada orang baru. Model hanya bisa dikirim bila akurasi ≥ 85% dan tidak lebih buruk dari model aktif.")
+                    Text("Clean → features → logistic regression → evaluation on unseen people. A model can only be sent if accuracy is ≥ 85% and no worse than the active model.")
                 }
 
                 if let report = store.trainingReport {
-                    Section("Hasil") {
+                    Section("Results") {
                         if store.candidate != nil {
-                            Button("Kirim ke Watch") { store.deployCandidate() }
+                            Button("Send to Watch") { store.deployCandidate() }
                                 .buttonStyle(.borderedProminent)
                         }
                         ScrollView(.horizontal) {
@@ -219,7 +219,7 @@ struct ModelScreen: View {
     }
 }
 
-// MARK: - Evaluasi kesiapan
+// MARK: - Readiness evaluation
 
 struct EvaluationScreen: View {
     @Environment(CompanionStore.self) private var store
@@ -232,7 +232,7 @@ struct EvaluationScreen: View {
                     .textSelection(.enabled)
                     .padding()
             }
-            .navigationTitle("Evaluasi")
+            .navigationTitle("Evaluation")
             .refreshable { store.refreshInventory() }
         }
     }

@@ -8,22 +8,22 @@ public enum ReadinessStatus: String, Codable, Sendable {
 public enum ReadinessReason: Codable, Sendable, Equatable {
     case inTargetZone
     case aboveTargetZone
-    /// HR bertahan di atas ambang hangat selama sekian menit dalam 10 menit terakhir.
+    /// HR stayed above the warm threshold for this many minutes within the last 10 minutes.
     case sustainedElevation(minutes: Double)
-    /// Tren kenaikan HR bertahap (bpm/menit) dalam 10 menit terakhir.
+    /// Gradual HR rise trend (bpm/minute) within the last 10 minutes.
     case gradualRise(bpmPerMinute: Double)
-    /// Ada aktivitas (Active Energy) yang cukup dalam 10 menit terakhir.
+    /// Enough activity (Active Energy) within the last 10 minutes.
     case recentActivity(kcal: Double)
     case belowTargetZone
     case noRecentHeartRate
 }
 
 public struct ReadinessInput: Sendable {
-    /// HR live dari HKLiveWorkoutBuilder (bila sudah tersedia).
+    /// Live HR from HKLiveWorkoutBuilder (when available).
     public var currentHR: HeartRateSample?
-    /// Riwayat HR 10 menit sebelum Start.
+    /// HR history for the 10 minutes before Start.
     public var history: [HeartRateSample]
-    /// Active Energy (kkal) 10 menit sebelum Start.
+    /// Active Energy (kcal) for the 10 minutes before Start.
     public var recentActiveEnergy: Double?
     public var zones: HeartRateZones
     public var now: Date
@@ -44,24 +44,24 @@ public struct ReadinessAssessment: Sendable, Equatable {
     public var reasons: [ReadinessReason]
     public var minutesAboveWarm: Double
     public var trendBpmPerMinute: Double?
-    /// Hasil pembersihan data HR (sampel dibuang, celah) — supaya keputusan bisa diaudit.
+    /// HR data cleaning result (removed samples, gaps) — so the decision can be audited.
     public var hrQuality: HeartRateQuality
 }
 
 /// Pilar 2 — Pre-Workout Readiness Prediction (FR-P01) & Final Readiness Confirmation (FR-P06).
 ///
-/// Aturan: pengguna **Belum Pemanasan** jika HR saat ini di bawah batas bawah Zona 1–2
-/// DAN tidak ada tanda kenaikan bertahap sebelumnya. Tanda kenaikan bertahap =
-/// HR saat ini ≥ ambang hangat dan salah satu dari: bertahan ≥ 3 menit di atas ambang,
-/// tren naik ≥ 1,5 bpm/menit, atau Active Energy ≥ 20 kkal dalam 10 menit terakhir.
+/// Rule: the user is **Not ready** if the current HR is below the lower bound of Zone 1–2
+/// AND there is no prior sign of a gradual rise. Sign of a gradual rise =
+/// current HR ≥ warm threshold and one of: ≥ 3 minutes above the threshold,
+/// a rising trend ≥ 1.5 bpm/minute, or Active Energy ≥ 20 kcal within the last 10 minutes.
 public struct ReadinessEngine: Sendable {
     public var lookback: TimeInterval = 10 * 60
     public var minimumSustainedMinutes: Double = 3
     public var minimumRiseBpmPerMinute: Double = 1.5
     public var minimumActiveEnergy: Double = 20
-    /// Sampel HR dianggap "saat ini" bila umurnya ≤ nilai ini.
+    /// An HR sample counts as "current" when its age is ≤ this value.
     public var currentSampleMaxAge: TimeInterval = 120
-    /// Satu sampel HealthKit mewakili paling lama durasi ini (sampel latar belakang jarang).
+    /// One HealthKit sample represents at most this duration (background samples are sparse).
     public var sampleHoldCap: TimeInterval = 150
     public var cleaner = HeartRateCleaner()
 
@@ -73,7 +73,7 @@ public struct ReadinessEngine: Sendable {
         if let live = input.currentHR { raw.append(live) }
         let (samples, quality) = cleaner.clean(raw, until: input.now)
 
-        // HR live yang dibuang pembersih (di luar rentang fisiologis) tidak dipakai.
+        // A live HR discarded by the cleaner (outside the physiological range) is not used.
         let liveValid = input.currentHR.flatMap { live in samples.contains(live) ? live : nil }
         let current = liveValid ?? samples.last.flatMap {
             input.now.timeIntervalSince($0.date) <= currentSampleMaxAge ? $0 : nil
@@ -102,7 +102,7 @@ public struct ReadinessEngine: Sendable {
         return result(.notWarmedUp, [.belowTargetZone])
     }
 
-    /// FR-P06: validasi ulang setelah rangkaian gerakan selesai.
+    /// FR-P06: re-validate after the exercise sequence is finished.
     public func confirmAfterWarmUp(heartRate: Double?, zones: HeartRateZones) -> Bool {
         guard let heartRate else { return false }
         return zones.isInReadyZone(heartRate)
@@ -117,7 +117,7 @@ public struct ReadinessEngine: Sendable {
         return seconds / 60
     }
 
-    /// Kemiringan regresi linear HR (bpm/menit). Butuh ≥ 3 sampel yang membentang ≥ 2 menit.
+    /// Linear regression slope of HR (bpm/minute). Needs ≥ 3 samples spanning ≥ 2 minutes.
     static func trend(_ samples: [HeartRateSample]) -> Double? {
         guard samples.count >= 3, let first = samples.first, let last = samples.last,
               last.date.timeIntervalSince(first.date) >= 120 else { return nil }

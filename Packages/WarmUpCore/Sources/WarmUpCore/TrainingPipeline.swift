@@ -1,7 +1,7 @@
 import Foundation
 
-/// Satu rekaman untuk training. Rekaman otomatis (dari pemanasan terpandu) berlabel lemah:
-/// labelnya = gerakan yang DIINSTRUKSIKAN, bukan hasil prediksi model.
+/// One recording for training. Automatic recordings (from guided warm-ups) are weakly labeled:
+/// the label = the INSTRUCTED exercise, not the model's prediction.
 public struct TrainingRecording: Sendable {
     public var name: RecordingName
     public var frames: [MotionFrame]
@@ -16,11 +16,11 @@ public struct TrainingRecording: Sendable {
 }
 
 public struct TrainingConfiguration: Sendable {
-    /// Partisipan yang DIKUNCI untuk pengujian dan tidak pernah dipakai melatih.
+    /// Participants LOCKED for testing and never used for training.
     public var goldenParticipants: Set<String> = []
-    /// Bobot data otomatis (label lemah) relatif terhadap data manual.
+    /// Weight of automatic (weakly labeled) data relative to manual data.
     public var autoWeight = 0.5
-    /// Batas jendela per partisipan per label, supaya satu orang tidak mendominasi.
+    /// Window cap per participant per label, so one person doesn't dominate.
     public var maxWindowsPerPersonLabel = 300
     public var minimumAccuracy = 0.85
     public var trimSeconds: TimeInterval = 1
@@ -37,7 +37,7 @@ public struct TrainingResult: Sendable {
     public var evaluationKind = ""
     public var candidate = ClassificationReport()
     public var baseline = ClassificationReport()
-    /// Model yang sedang aktif di watch, diuji pada data uji yang sama.
+    /// The model currently active on the watch, tested on the same test data.
     public var current: ClassificationReport?
     public var model: SoftmaxModel?
     public var promote = false
@@ -47,17 +47,17 @@ public struct TrainingResult: Sendable {
         var l: [String] = ["== 1–2. Collect & Clean =="] + summary
         for r in rejected { l.append("  ✘ \(r.file): \(r.reason)") }
         l += ["", "== 3–4. Features & Model ==",
-              "Logistic regression, \(MotionFeatureVector.names.count) fitur per jendela 2 dtk.",
+              "Logistic regression, \(MotionFeatureVector.names.count) features per 2-second window.",
               "", "== 5. Evaluate: \(evaluationKind) ==",
-              baseline.formatted(title: "Baseline heuristik"), "",
-              candidate.formatted(title: "Model baru")]
-        if let current { l += ["", current.formatted(title: "Model aktif saat ini")] }
-        l += ["", promote ? "✔ LAYAK dikirim ke watch" : "✘ TIDAK dikirim"] + reasons.map { "  • \($0)" }
+              baseline.formatted(title: "Heuristic baseline"), "",
+              candidate.formatted(title: "New model")]
+        if let current { l += ["", current.formatted(title: "Current active model")] }
+        l += ["", promote ? "✔ READY to send to the watch" : "✘ NOT sent"] + reasons.map { "  • \($0)" }
         return l.joined(separator: "\n")
     }
 }
 
-/// Pipeline training di iPhone: Clean → Features → Model → Evaluate → keputusan promosi.
+/// Training pipeline on iPhone: Clean → Features → Model → Evaluate → promotion decision.
 public enum TrainingPipeline {
     struct Window {
         var features: [Double]
@@ -72,7 +72,7 @@ public enum TrainingPipeline {
                            configuration config: TrainingConfiguration = TrainingConfiguration(),
                            now: Date = .now) -> TrainingResult {
         var result = TrainingResult()
-        // Detik penuh: versi model = epoch detik, dan ISO-8601 tidak menyimpan pecahan detik.
+        // Whole seconds: model version = epoch seconds, and ISO-8601 doesn't store fractional seconds.
         let now = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
         let heuristic = HeuristicMotionClassifier()
         let currentModel = current.flatMap { $0.isCompatible ? $0 : nil }
@@ -113,11 +113,11 @@ public enum TrainingPipeline {
         let people = Set(windows.map(\.person)).sorted()
         let labels = Set(windows.map(\.label)).sorted()
         let autoCount = recordings.filter(\.isAuto).count
-        result.summary.append("\(recordings.count) rekaman (\(autoCount) otomatis), \(result.rejected.count) ditolak, \(windows.count) jendela")
-        result.summary.append("Partisipan: \(people.joined(separator: ", ")); label: \(labels.joined(separator: ", "))")
+        result.summary.append("\(recordings.count) recordings (\(autoCount) automatic), \(result.rejected.count) rejected, \(windows.count) windows")
+        result.summary.append("Participants: \(people.joined(separator: ", ")); labels: \(labels.joined(separator: ", "))")
 
         guard labels.count >= 2 else {
-            result.reasons.append("Butuh minimal 2 label.")
+            result.reasons.append("Needs at least 2 labels.")
             return result
         }
 
@@ -142,17 +142,17 @@ public enum TrainingPipeline {
         let golden = config.goldenParticipants.intersection(people)
         let trainable = windows.filter { !golden.contains($0.person) }
         if !golden.isEmpty {
-            result.evaluationKind = "golden set \(golden.sorted().joined(separator: ", ")) (tidak pernah dipakai melatih)"
+            result.evaluationKind = "golden set \(golden.sorted().joined(separator: ", ")) (never used for training)"
             guard Set(trainable.map(\.label)).count >= 2 else {
-                result.reasons.append("Data latih di luar golden set kurang dari 2 label.")
+                result.reasons.append("Training data outside the golden set has fewer than 2 labels.")
                 return result
             }
             evaluate(train(trainable, evaluation: "", accuracy: nil), on: windows.filter { golden.contains($0.person) })
         } else {
             let known = people.filter { $0 != "?" }
             guard known.count >= 2 else {
-                result.evaluationKind = "tidak bisa (partisipan < 2)"
-                result.reasons.append("Butuh ≥ 2 partisipan untuk menguji pada orang baru.")
+                result.evaluationKind = "not possible (participants < 2)"
+                result.reasons.append("Needs ≥ 2 participants to test on new people.")
                 return result
             }
             result.evaluationKind = "leave-one-person-out (\(known.count) fold)"
@@ -163,17 +163,17 @@ public enum TrainingPipeline {
             }
         }
 
-        // Model final: semua data KECUALI golden set.
+        // Final model: all data EXCEPT the golden set.
         let accuracy = result.candidate.accuracy
-        result.model = train(trainable, evaluation: "\(result.evaluationKind), akurasi \(pct(accuracy))", accuracy: accuracy)
+        result.model = train(trainable, evaluation: "\(result.evaluationKind), accuracy \(pct(accuracy))", accuracy: accuracy)
 
-        // Keputusan promosi.
+        // Promotion decision.
         let comparator = result.current ?? result.baseline
-        let comparatorName = result.current == nil ? "baseline heuristik" : "model aktif"
+        let comparatorName = result.current == nil ? "heuristic baseline" : "active model"
         let ok = (accuracy ?? 0) >= config.minimumAccuracy
         let better = (accuracy ?? 0) >= (comparator.accuracy ?? 0)
-        result.reasons.append("Akurasi \(pct(accuracy)) \(ok ? "≥" : "<") \(pct(config.minimumAccuracy)) (NFR-03)")
-        result.reasons.append("\(better ? "≥" : "<") \(comparatorName) \(pct(comparator.accuracy)) pada data uji yang sama")
+        result.reasons.append("Accuracy \(pct(accuracy)) \(ok ? "≥" : "<") \(pct(config.minimumAccuracy)) (NFR-03)")
+        result.reasons.append("\(better ? "≥" : "<") \(comparatorName) \(pct(comparator.accuracy)) on the same test data")
         result.promote = ok && better
         return result
     }

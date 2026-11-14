@@ -4,7 +4,7 @@ import Testing
 
 @Suite("Pipeline: Collect")
 struct CollectTests {
-    @Test("Nama berkas memuat kode partisipan & pergelangan, tanpa nama asli")
+    @Test("File name includes participant code & wrist, no real name")
     func recordingName() {
         let name = RecordingName(label: "armCircles", participant: "P03", wrist: .left, id: "1731550000")
         #expect(name.session == "armCircles_P03_L_1731550000")
@@ -28,16 +28,16 @@ struct CollectTests {
         #expect(abs(decoded[4].timestamp - 0.08) < 1e-9)
     }
 
-    @Test("Log sesi JSON Lines dapat dibaca kembali")
+    @Test("JSON Lines session log can be read back")
     func sessionLogRoundTrip() throws {
         let zones = HeartRateZones(physiology: UserPhysiology(age: 30, restingHR: 65))
         let assessment = ReadinessAssessment(status: .notWarmedUp, heartRate: 70, zones: zones, reasons: [.belowTargetZone],
                                              minutesAboveWarm: 0, trendBpmPerMinute: nil, hrQuality: HeartRateQuality())
         let entry = SessionLogEntry(date: Date(timeIntervalSince1970: 1_800_000_000), participant: "P02", wrist: .left,
                                     scenario: .cold, workout: .outdoorRun, assessment: assessment, checkLatency: 2.4,
-                                    classifier: "heuristik", warmUp: .completed, finalConfirmed: true,
+                                    classifier: "heuristic", warmUp: .completed, finalConfirmed: true,
                                     steps: [StepLog(exercise: .armCircles, target: .reps(15), counted: 15, completed: true, referenceReps: 14)])
-        let text = try entry.jsonLine() + "\n{rusak}\n"
+        let text = try entry.jsonLine() + "\n{corrupt}\n"
         let decoded = SessionLogEntry.decodeLines(text)
         #expect(decoded.entries == [entry])
         #expect(decoded.invalidLines == 1)
@@ -48,15 +48,15 @@ struct CollectTests {
 struct CleanTests {
     let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
-    @Test("Buang nilai di luar rentang tubuh dan spike terisolasi; celah tetap terlihat")
+    @Test("Drop out-of-range values and isolated spikes; gaps stay visible")
     func heartRateCleaning() {
         let samples = [
             HeartRateSample(date: t0, bpm: 72),
             HeartRateSample(date: t0.addingTimeInterval(10), bpm: 74),
-            HeartRateSample(date: t0.addingTimeInterval(20), bpm: 150), // spike artefak
+            HeartRateSample(date: t0.addingTimeInterval(20), bpm: 150), // artifact spike
             HeartRateSample(date: t0.addingTimeInterval(30), bpm: 75),
-            HeartRateSample(date: t0.addingTimeInterval(40), bpm: 0),   // sensor gagal
-            HeartRateSample(date: t0.addingTimeInterval(400), bpm: 78), // setelah celah 370 dtk
+            HeartRateSample(date: t0.addingTimeInterval(40), bpm: 0),   // sensor failure
+            HeartRateSample(date: t0.addingTimeInterval(400), bpm: 78), // after a 370 s gap
         ]
         let (clean, quality) = HeartRateCleaner().clean(samples)
         #expect(clean.map(\.bpm) == [72, 74, 75, 78])
@@ -66,13 +66,13 @@ struct CleanTests {
         #expect(quality.longestGapMinutes > 6)
     }
 
-    @Test("Kenaikan HR yang wajar (bertahap) tidak dianggap spike")
+    @Test("A normal (gradual) HR rise is not treated as a spike")
     func gradualRiseKept() {
         let samples = (0..<6).map { HeartRateSample(date: t0.addingTimeInterval(Double($0) * 10), bpm: 80 + Double($0) * 8) }
         #expect(HeartRateCleaner().clean(samples).samples.count == 6)
     }
 
-    @Test("HR live yang tidak masuk akal tidak membuat status Siap")
+    @Test("An implausible live HR does not produce Ready")
     func implausibleLiveHRIgnored() {
         let zones = HeartRateZones(physiology: UserPhysiology(age: 30, restingHR: 65))
         let history = [HeartRateSample(date: t0.addingTimeInterval(-60), bpm: 70)]
@@ -84,20 +84,20 @@ struct CleanTests {
         #expect(a.hrQuality.removedOutOfRange == 1)
     }
 
-    @Test("Rekaman gerak terlalu pendek / sampel hilang ditolak")
+    @Test("Motion recordings that are too short / have dropped samples are rejected")
     func motionQuality() {
         func frames(_ n: Int, dt: Double) -> [MotionFrame] {
             (0..<n).map { MotionFrame(timestamp: Double($0) * dt, userAcceleration: .zero, rotationRate: .zero, gravity: Vector3(0, 0, -1)) }
         }
         #expect(MotionRecordingQuality(frames(500, dt: 0.02)).rejectionReason() == nil)
-        #expect(MotionRecordingQuality(frames(100, dt: 0.02)).rejectionReason() != nil)  // 2 dtk
+        #expect(MotionRecordingQuality(frames(100, dt: 0.02)).rejectionReason() != nil)  // 2 s
         #expect(MotionRecordingQuality(frames(300, dt: 0.05)).rejectionReason() != nil)  // 20 Hz
     }
 }
 
 @Suite("Pipeline: Features")
 struct FeatureTests {
-    @Test("HRV ≥ 20% di bawah baseline pribadi → pemanasan diperpanjang")
+    @Test("HRV ≥ 20% below personal baseline → warm-up extended")
     func lowHRV() {
         let ctx = RecoveryContext(workout: .outdoorRun, physiology: UserPhysiology(age: 30, restingHR: 60), sleepHours: 8,
                                   restingHRBaseline: 60, startHour: 17, hrvSDNN: 32, hrvBaseline: 50)
@@ -109,7 +109,7 @@ struct FeatureTests {
 
 @Suite("Pipeline: Evaluate")
 struct EvaluateTests {
-    @Test("Sensitivity & PPV dihitung dari confusion matrix")
+    @Test("Sensitivity & PPV are computed from the confusion matrix")
     func classificationReport() {
         var r = ClassificationReport()
         r.add(truth: "armCircles", predicted: "armCircles", count: 8)
@@ -119,10 +119,10 @@ struct EvaluateTests {
         #expect(r.accuracy == 0.85)
         #expect(r.sensitivity(of: "armCircles") == 0.8)
         #expect(r.ppv(of: "armCircles") == 8.0 / 9.0)
-        #expect(r.formatted(title: "uji").contains("sensitivity"))
+        #expect(r.formatted(title: "test").contains("sensitivity"))
     }
 
-    @Test("Evaluasi kesiapan vs skenario referensi & hitungan manual")
+    @Test("Readiness evaluation vs reference scenario & manual count")
     func readinessReport() {
         let zones = HeartRateZones(physiology: UserPhysiology(age: 30, restingHR: 65))
         func entry(_ scenario: ReferenceScenario, predicted: ReadinessStatus, person: String, latency: Double = 2) -> SessionLogEntry {
@@ -137,7 +137,7 @@ struct EvaluateTests {
             entry(.cold, predicted: .ready, person: "P02"),                // FN
             entry(.warm, predicted: .ready, person: "P01"),                // TN
             entry(.warm, predicted: .notWarmedUp, person: "P02", latency: 4), // FP
-            entry(.unknown, predicted: .ready, person: "P03"),             // tanpa referensi
+            entry(.unknown, predicted: .ready, person: "P03"),             // no reference
         ])
         #expect(report.overall.sensitivity == 0.5)
         #expect(report.overall.ppv == 0.5)

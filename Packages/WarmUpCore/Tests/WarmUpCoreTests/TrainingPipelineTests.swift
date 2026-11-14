@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import WarmUpCore
 
-/// Generator data sintetis: tiap orang punya tempo & amplitudo berbeda, kiri/kanan membalik arah rotasi.
+/// Synthetic data generator: each person has a different tempo & amplitude; left/right flips the rotation direction.
 enum Synthetic {
     struct RNG: RandomNumberGenerator {
         var state: UInt64
@@ -51,9 +51,9 @@ enum Synthetic {
     }
 }
 
-@Suite("Training di iPhone (logistic regression)")
+@Suite("Training on iPhone (logistic regression)")
 struct TrainingPipelineTests {
-    @Test("Leave-one-person-out: model belajar dan layak dipromosikan")
+    @Test("Leave-one-person-out: model learns and qualifies for promotion")
     func leaveOnePersonOut() {
         let result = TrainingPipeline.run(recordings: Synthetic.dataset(), current: nil)
         #expect(result.evaluationKind.hasPrefix("leave-one-person-out"))
@@ -62,7 +62,7 @@ struct TrainingPipelineTests {
         #expect(result.model?.labels == ["armCircles", "idle", "marchInPlace", "torsoTwist"])
     }
 
-    @Test("Golden set tidak pernah dipakai melatih model final")
+    @Test("Golden set is never used to train the final model")
     func goldenSetLocked() {
         var config = TrainingConfiguration()
         config.goldenParticipants = ["P03"]
@@ -71,7 +71,7 @@ struct TrainingPipelineTests {
         #expect(result.model?.info.participants == ["P01", "P02"])
     }
 
-    @Test("Rekaman rusak ditolak; satu partisipan tidak cukup untuk evaluasi")
+    @Test("Broken recordings are rejected; one participant is not enough for evaluation")
     func cleanAndRefuse() {
         var data = Synthetic.dataset(people: ["P01"])
         data.append(Synthetic.recording("armCircles", person: "P01", wrist: .left, seconds: 2, seed: 99))
@@ -81,7 +81,7 @@ struct TrainingPipelineTests {
         #expect(result.model == nil)
     }
 
-    @Test("Model baru dibandingkan dengan model aktif; JSON round-trip & dipakai di watch")
+    @Test("New model is compared with the active model; JSON round-trip & used on watch")
     func compareAndDeploy() throws {
         let first = TrainingPipeline.run(recordings: Synthetic.dataset(), current: nil)
         let model = try #require(first.model)
@@ -96,14 +96,14 @@ struct TrainingPipelineTests {
         #expect(prediction?.label == .torsoTwist)
     }
 
-    @Test("Rekaman otomatis dikenali dari id dan diberi bobot lebih rendah")
+    @Test("Automatic recordings are detected by id and weighted lower")
     func autoRecordings() {
         let auto = Synthetic.recording("armCircles", person: "P01", wrist: .left, seed: 5, auto: true)
         #expect(auto.isAuto)
         #expect(RecordingName(fileName: auto.name.session + ".csv")?.isAuto == true)
     }
 
-    @Test("Pengaturan companion bisa dikodekan untuk dikirim ke watch")
+    @Test("Companion settings can be encoded to send to the watch")
     func settingsRoundTrip() throws {
         var s = CompanionSettings()
         s.participant = "P07"

@@ -2,15 +2,15 @@ import Foundation
 import Observation
 import WarmUpCore
 
-/// Orkestrator alur end-to-end (PRD §2):
-/// Workout Trigger → Akuisisi Awal → Evaluasi Kesiapan → Peringatan & Rencana → Guided Warm-Up → Konfirmasi Akhir.
+/// End-to-end flow orchestrator (PRD §2):
+/// Workout Trigger → Initial Acquisition → Readiness Check → Warning & Plan → Guided Warm-Up → Final Confirmation.
 @Observable
 final class AppFlow {
     enum Phase: Equatable {
         case home, checking, unready, warmingUp, confirming, ready, workout, finished
     }
 
-    // MARK: State untuk UI
+    // MARK: UI state
     private(set) var phase: Phase = .home
     private(set) var workout: WorkoutKind = .outdoorRun
     private(set) var assessment: ReadinessAssessment?
@@ -26,7 +26,7 @@ final class AppFlow {
     private(set) var lastInferenceMilliseconds: Double?
     private(set) var confirmTimedOut = false
     private(set) var summaryNote: String?
-    /// Hasil tiap gerakan (dihitung app) — dibandingkan dengan hitungan manual di Mode Studi.
+    /// Per-exercise results (app-counted) — compared against the manual count in Study Mode.
     private(set) var stepLogs: [StepLog] = []
     var errorMessage: String?
 
@@ -36,7 +36,7 @@ final class AppFlow {
     var zones: HeartRateZones? { assessment?.zones }
     var currentStep: WarmUpStep? { activePlan.flatMap { stepIndex < $0.steps.count ? $0.steps[stepIndex] : nil } }
 
-    // MARK: Dependensi
+    // MARK: Dependencies
     let health = HealthDataService()
     let workoutManager: WorkoutSessionManager
     private let motion = MotionSampler()
@@ -65,18 +65,18 @@ final class AppFlow {
         workoutManager.onHeartRate = { [weak self] sample in self?.heartRateLog.append(sample) }
     }
 
-    // MARK: Izin
+    // MARK: Permissions
     func prepare() async {
         guard !authorized, health.isAvailable else { return }
         do {
             try await health.requestAuthorization()
             authorized = true
         } catch {
-            errorMessage = "Izin HealthKit diperlukan untuk membaca detak jantung."
+            errorMessage = "HealthKit access is needed to read your heart rate."
         }
     }
 
-    // MARK: 1–3. Trigger, akuisisi awal, evaluasi kesiapan (≤ 3 detik)
+    // MARK: 1–3. Trigger, initial acquisition, readiness check (≤ 3 seconds)
     func start(_ kind: WorkoutKind) {
         resetSession()
         workout = kind
@@ -91,7 +91,7 @@ final class AppFlow {
         do {
             try await workoutManager.start(workout)
         } catch {
-            errorMessage = "Gagal memulai sesi workout: \(error.localizedDescription)"
+            errorMessage = "Couldn't start workout session: \(error.localizedDescription)"
             phase = .home
             return
         }
@@ -124,7 +124,7 @@ final class AppFlow {
         }
     }
 
-    // MARK: 4. Peringatan & rencana
+    // MARK: 4. Warning & plan
     private func presentUnready(_ result: ReadinessAssessment, recovery: RecoveryContext) {
         let basePlan = planner.plan(for: recovery)
         plan = basePlan
@@ -175,7 +175,7 @@ final class AppFlow {
         }
         self.pipeline = pipeline
         if !motion.start(handler: { pipeline.process($0) }) {
-            errorMessage = "Sensor gerak tidak tersedia di perangkat ini."
+            errorMessage = "Motion sensors aren't available on this device."
         }
     }
 
@@ -197,7 +197,7 @@ final class AppFlow {
             case .resumed:
                 isPaused = false
             case .stepCompleted(let index):
-                Haptics.play(.success) // FR-P05: haptik sukses + chime sistem
+                Haptics.play(.success) // FR-P05: success haptic + system chime
                 let step = activePlan.steps[index]
                 stepLogs.append(StepLog(exercise: step.exercise, target: step.target, counted: step.target.value, completed: true))
             case .stepStarted(let index):
@@ -218,9 +218,9 @@ final class AppFlow {
         speech.speak(usesAICues ? cues[index] : TemplateCoach.stepCue(activePlan.steps[index], isFirst: index == 0))
     }
 
-    // MARK: 6. Konfirmasi akhir
+    // MARK: 6. Final confirmation
     private func finishWarmUp() {
-        stopMotion() // NFR-01: matikan sensor 50 Hz segera
+        stopMotion() // NFR-01: turn off the 50 Hz sensor right away
         phase = .confirming
         confirmTimedOut = false
         flowTask = Task { await confirmReadiness() }
@@ -255,7 +255,7 @@ final class AppFlow {
         }
     }
 
-    // MARK: Latihan inti
+    // MARK: Main workout
     func skipWarmUp() {
         warmUpSkipped = true
         enterWorkout()
@@ -277,7 +277,7 @@ final class AppFlow {
         let alreadyReady = warmUpStart == nil && !warmUpSkipped
         Task {
             let note = alreadyReady
-                ? "Sudah siap saat mulai (HR \(heartRate.map { "\(Int($0))" } ?? "–") bpm), tanpa pemanasan tambahan."
+                ? "Already ready at start (HR \(heartRate.map { "\(Int($0))" } ?? "–") bpm), no extra warm-up needed."
                 : await coach.summaryNote(summary, workout: workout)
             summaryNote = note
             await workoutManager.addMetadata([
@@ -304,13 +304,13 @@ final class AppFlow {
         phase = .home
     }
 
-    /// Kembali ke menu; di Mode Studi sekaligus menyimpan hitungan manual peneliti sebagai referensi.
+    /// Returns to the menu; in Study Mode also saves the researcher's manual count as the reference.
     func backHome(references: [Int: Int] = [:]) {
         logSession(references: references)
         phase = .home
     }
 
-    /// Rekaman otomatis berlabel lemah (label = instruksi), dikirim ke iPhone untuk training berikutnya.
+    /// Weakly labeled auto-recording (label = instruction), sent to iPhone for the next training run.
     private func saveAutoRecording(_ exercise: Exercise, frames: [MotionFrame]) {
         guard AppSettings.isAutoCollecting, MotionRecordingQuality(frames).rejectionReason() == nil else { return }
         let name = RecordingName(label: MotionLabel(exercise: exercise).rawValue, participant: AppSettings.participant,
@@ -321,7 +321,7 @@ final class AppFlow {
             try MotionCSV.encode(frames, name: name).write(to: url, atomically: true, encoding: .utf8)
             PhoneConnector.shared.sendTrainingFile(url)
         } catch {
-            // Rekaman otomatis bersifat opsional; kegagalan tidak boleh mengganggu pemanasan.
+            // Auto-recording is optional; a failure must never interrupt the warm-up.
         }
     }
 
@@ -330,7 +330,7 @@ final class AppFlow {
         stepLogs.append(StepLog(exercise: step.exercise, target: step.target, counted: stepProgress, completed: false))
     }
 
-    // MARK: Log evaluasi (Mode Studi)
+    // MARK: Evaluation log (Study Mode)
     private func logSession(references: [Int: Int]) {
         guard AppSettings.isStudyLogging, !sessionLogged, let assessment else { return }
         sessionLogged = true
@@ -354,9 +354,9 @@ final class AppFlow {
         do {
             try SessionLogger.append(entry)
         } catch {
-            errorMessage = "Gagal menyimpan log evaluasi: \(error.localizedDescription)"
+            errorMessage = "Couldn't save evaluation log: \(error.localizedDescription)"
         }
-        // Referensi skenario berlaku untuk satu sesi saja, supaya tidak terbawa salah ke sesi berikutnya.
+        // The scenario reference applies to one session only, so it doesn't carry over to the next one by mistake.
         AppSettings.scenario = .unknown
     }
 

@@ -1,15 +1,15 @@
-// warmup-eval — evaluasi prediksi kesiapan terhadap referensi (pipeline tahap 5).
+// warmup-eval — evaluates readiness predictions against the reference (pipeline stage 5).
 //
-//   swift run --package-path Packages/WarmUpCore warmup-eval path/ke/sessions.jsonl [lainnya.jsonl ...]
+//   swift run --package-path Packages/WarmUpCore warmup-eval path/to/sessions.jsonl [more.jsonl ...]
 //
-// Log berasal dari Mode Studi di jam: Documents/evaluation/sessions.jsonl
+// Logs come from Study Mode on the watch: Documents/evaluation/sessions.jsonl
 // (Xcode › Devices and Simulators › WarmUp Pulse › Download Container).
 import Foundation
 import WarmUpCore
 
 let paths = Array(CommandLine.arguments.dropFirst())
 guard !paths.isEmpty else {
-    print("Pemakaian: warmup-eval <sessions.jsonl> [lainnya.jsonl ...]")
+    print("Usage: warmup-eval <sessions.jsonl> [more.jsonl ...]")
     exit(2)
 }
 
@@ -17,7 +17,7 @@ var entries: [SessionLogEntry] = []
 var invalid = 0
 for path in paths {
     guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
-        print("Tidak bisa membaca \(path)")
+        print("Cannot read \(path)")
         exit(2)
     }
     let decoded = SessionLogEntry.decodeLines(text)
@@ -25,9 +25,9 @@ for path in paths {
     invalid += decoded.invalidLines
 }
 
-// Satu sesi bisa tercatat ganda bila log digabung dari beberapa unduhan.
+// A session can appear twice when logs are merged from several downloads.
 var seen = Set<UUID>()
 entries = entries.filter { seen.insert($0.id).inserted }
 
-print("Membaca \(entries.count) sesi dari \(paths.count) berkas\(invalid > 0 ? " (\(invalid) baris rusak dilewati)" : "").\n")
+print("Read \(entries.count) sessions from \(paths.count) files\(invalid > 0 ? " (\(invalid) corrupt lines skipped)" : "").\n")
 print(ReadinessReport(entries: entries).formatted())

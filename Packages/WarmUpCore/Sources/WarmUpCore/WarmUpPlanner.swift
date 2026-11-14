@@ -4,7 +4,7 @@ public enum PlanAdjustment: Codable, Sendable, Equatable {
     case shortSleep(hours: Double)
     case earlyMorning(hour: Int)
     case elevatedRestingHR(delta: Double)
-    /// HRV hari ini sekian persen di bawah baseline pribadi (tanda pemulihan belum optimal).
+    /// Today's HRV is this many percent below the personal baseline (a sign of incomplete recovery).
     case lowHRV(percentBelow: Double)
 }
 
@@ -22,8 +22,8 @@ public struct WarmUpPlan: Codable, Sendable, Equatable {
     public var exerciseListText: String { steps.map(\.exercise.displayName).joined(separator: " + ") }
 }
 
-/// Planner deterministik. Dipakai langsung sebagai fallback, dan sebagai validator/penghitung target
-/// untuk saran Apple Intelligence (AI hanya memilih urutan gerakan & durasi; angka target dihitung di sini).
+/// Deterministic planner. Used directly as the fallback, and as the validator/target calculator
+/// for Apple Intelligence suggestions (the AI only picks exercise order & duration; target numbers are computed here).
 public struct WarmUpPlanner: Sendable {
     public static let baseMinutes = 3
     public static let extendedMinutes = 5
@@ -32,12 +32,12 @@ public struct WarmUpPlanner: Sendable {
     public var shortSleepHours: Double = 6
     public var earlyMorningBeforeHour = 9
     public var elevatedRHRDelta: Double = 5
-    /// HRV dianggap rendah bila ≥ 20% di bawah baseline pribadi.
+    /// HRV counts as low when it is ≥ 20% below the personal baseline.
     public var lowHRVFraction: Double = 0.2
 
     public init() {}
 
-    /// FR-I01: kalibrasi durasi dari data pemulihan.
+    /// FR-I01: calibrate duration from recovery data.
     public func adjustments(for context: RecoveryContext) -> [PlanAdjustment] {
         var result: [PlanAdjustment] = []
         if let sleep = context.sleepHours, sleep < shortSleepHours { result.append(.shortSleep(hours: sleep)) }
@@ -53,7 +53,7 @@ public struct WarmUpPlanner: Sendable {
         return result
     }
 
-    /// FR-I03 (versi rule-based): gerakan yang paling relevan dengan olahraga tujuan.
+    /// FR-I03 (rule-based version): the exercises most relevant to the target workout.
     public static func recommendedExercises(for workout: WorkoutKind, extended: Bool) -> [Exercise] {
         switch workout {
         case .outdoorRun, .indoorRun, .cycling:
@@ -72,8 +72,8 @@ public struct WarmUpPlanner: Sendable {
         return plan(exercises: exercises, durationMinutes: minutes, adjustments: adjustments)
     }
 
-    /// Membuat rencana dari daftar gerakan & durasi (misal hasil AI) dengan guardrail:
-    /// 2–3 gerakan unik, durasi 3–5 menit.
+    /// Builds a plan from a list of exercises & a duration (e.g. AI output) with guardrails:
+    /// 2–3 unique exercises, 3–5 minutes long.
     public func plan(exercises: [Exercise], durationMinutes: Int, adjustments: [PlanAdjustment]) -> WarmUpPlan {
         var unique: [Exercise] = []
         for e in exercises where !unique.contains(e) { unique.append(e) }
@@ -98,7 +98,7 @@ public struct WarmUpPlanner: Sendable {
         return WarmUpPlan(steps: steps, durationMinutes: minutes, adjustments: adjustments)
     }
 
-    /// Satu gerakan tambahan bila HR belum masuk zona setelah pemanasan selesai.
+    /// One extra exercise when HR hasn't entered the zone after the warm-up is done.
     public func extraMinute() -> WarmUpPlan {
         WarmUpPlan(steps: [WarmUpStep(exercise: .marchInPlace, target: .duration(60))], durationMinutes: 1, adjustments: [])
     }

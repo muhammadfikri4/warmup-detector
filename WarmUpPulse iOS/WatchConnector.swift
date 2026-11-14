@@ -3,16 +3,16 @@ import Observation
 import WarmUpCore
 import WatchConnectivity
 
-/// Lokasi data di iPhone.
+/// Data locations on the iPhone.
 enum CompanionPaths {
     nonisolated static var training: URL { URL.documentsDirectory.appending(path: "training", directoryHint: .isDirectory) }
     nonisolated static var sessions: URL { URL.documentsDirectory.appending(path: "evaluation/sessions.jsonl") }
     nonisolated static var activeModel: URL { URL.documentsDirectory.appending(path: "models/active.json") }
 }
 
-/// Jembatan iPhone ↔ watch.
-/// - Mengirim: pengaturan (application context), model & perintah reset (user info).
-/// - Menerima: CSV data latih (file), baris log evaluasi (user info), status watch (application context).
+/// iPhone ↔ watch bridge.
+/// - Sends: settings (application context), models and reset commands (user info).
+/// - Receives: training-data CSVs (files), evaluation log lines (user info), watch status (application context).
 @Observable
 final class WatchConnector: NSObject {
     private(set) var isPaired = false
@@ -30,7 +30,7 @@ final class WatchConnector: NSObject {
         WCSession.default.activate()
     }
 
-    /// Segarkan status pasangan (mis. watch baru menyala setelah app iPhone dibuka).
+    /// Refresh pairing state (e.g. the watch turned on after the iPhone app was opened).
     func refresh() {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
         refreshState(.default)
@@ -79,7 +79,7 @@ extension WatchConnector: WCSessionDelegate {
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
 
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
-        // Pengguna berganti Apple Watch: aktifkan ulang untuk watch yang baru.
+        // The user switched Apple Watches: reactivate for the new watch.
         session.activate()
     }
 
@@ -102,7 +102,7 @@ extension WatchConnector: WCSessionDelegate {
     }
 
     nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {
-        // Berkas sementara hanya valid selama method ini berjalan → pindahkan sekarang juga.
+        // The temporary file is only valid while this method runs → move it right away.
         guard file.metadata?[SyncKey.kind] as? String == SyncKey.training,
               let name = file.metadata?[SyncKey.fileName] as? String,
               RecordingName(fileName: name) != nil else { return }

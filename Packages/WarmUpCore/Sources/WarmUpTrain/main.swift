@@ -1,16 +1,16 @@
-// warmup-train — pipeline data gerak: Collect → Clean → Features → Model → Evaluate.
+// warmup-train — motion data pipeline: Collect → Clean → Features → Model → Evaluate.
 //
-//   swift run --package-path Packages/WarmUpCore warmup-train <folder-csv> [output.mlmodel] [--iterations N]
+//   swift run --package-path Packages/WarmUpCore warmup-train <csv-folder> [output.mlmodel] [--iterations N]
 //
-// 1. Collect  : CSV `<label>_<partisipan>_<L|R>_<id>.csv` dari layar "Rekam Data Latih".
-// 2. Clean    : tolak rekaman rusak (durasi pendek, sampling < 40 Hz, sampel hilang, NaN),
-//               potong 1 detik awal & akhir (transisi mulai/berhenti).
-// 3. Features : Activity Classifier CreateML belajar fiturnya sendiri dari 6 kanal mentah
-//               (akselerasi + rotasi), jendela 2 dtk @ 50 Hz.
-// 4. Model    : baseline sederhana (classifier heuristik) vs CreateML pada data uji yang SAMA.
-// 5. Evaluate : leave-one-person-out — model diuji pada orang yang tidak ikut dilatih,
-//               dilaporkan sensitivity & PPV per gerakan. Gagal (exit 1) bila akurasi < 85% (NFR-03).
-// Terakhir, model final dilatih dengan SEMUA data dan disimpan.
+// 1. Collect  : CSV `<label>_<participant>_<L|R>_<id>.csv` from the "Record Training Data" screen.
+// 2. Clean    : reject broken recordings (too short, sampling < 40 Hz, dropped samples, NaN),
+//               trim the first & last second (start/stop transitions).
+// 3. Features : the CreateML Activity Classifier learns its own features from 6 raw channels
+//               (acceleration + rotation), 2 s windows @ 50 Hz.
+// 4. Model    : simple baseline (heuristic classifier) vs CreateML on the SAME test data.
+// 5. Evaluate : leave-one-person-out — the model is tested on people it wasn't trained on,
+//               reporting sensitivity & PPV per exercise. Fails (exit 1) when accuracy < 85% (NFR-03).
+// Finally, the final model is trained on ALL data and saved.
 #if os(macOS)
 import CreateML
 import Foundation
@@ -20,7 +20,7 @@ let featureColumns = ["acc_x", "acc_y", "acc_z", "rot_x", "rot_y", "rot_z"]
 let trimSeconds: TimeInterval = 1
 let fm = FileManager.default
 
-// MARK: Argumen
+// MARK: Arguments
 var positional: [String] = []
 var iterations = 40
 var args = CommandLine.arguments.dropFirst().makeIterator()
@@ -28,7 +28,7 @@ while let arg = args.next() {
     if arg == "--iterations", let n = args.next().flatMap(Int.init) { iterations = n } else { positional.append(arg) }
 }
 guard let sourcePath = positional.first else {
-    print("Pemakaian: warmup-train <folder-csv> [output.mlmodel] [--iterations N]")
+    print("Usage: warmup-train <csv-folder> [output.mlmodel] [--iterations N]")
     exit(2)
 }
 let source = URL(fileURLWithPath: sourcePath, isDirectory: true)
@@ -46,7 +46,7 @@ let files = try fm.contentsOfDirectory(at: source, includingPropertiesForKeys: n
     .filter { $0.pathExtension == "csv" }
     .sorted { $0.lastPathComponent < $1.lastPathComponent }
 guard !files.isEmpty else {
-    print("Tidak ada CSV di \(source.path)")
+    print("No CSV files in \(source.path)")
     exit(2)
 }
 
@@ -55,7 +55,7 @@ var recordings: [Recording] = []
 var rejected: [(String, String)] = []
 for url in files {
     guard let name = RecordingName(fileName: url.lastPathComponent) else {
-        rejected.append((url.lastPathComponent, "nama berkas tidak sesuai konvensi"))
+        rejected.append((url.lastPathComponent, "file name does not follow the convention"))
         continue
     }
     let frames = MotionCSV.decode(try String(contentsOf: url, encoding: .utf8))
@@ -70,25 +70,25 @@ for url in files {
 
 let people = Set(recordings.map(\.person)).sorted()
 let labels = Set(recordings.map(\.name.label)).sorted()
-print("\(files.count) berkas, \(recordings.count) lolos, \(rejected.count) ditolak; \(people.count) partisipan; label: \(labels.joined(separator: ", "))")
+print("\(files.count) files, \(recordings.count) passed, \(rejected.count) rejected; \(people.count) participants; labels: \(labels.joined(separator: ", "))")
 for label in labels {
     let perPerson = people.map { p in "\(p)×\(recordings.filter { $0.person == p && $0.name.label == label }.count)" }
     print("  • \(label): \(perPerson.joined(separator: " "))")
 }
 
 print("\n== 2. Clean ==")
-print("Potong \(Int(trimSeconds)) dtk awal & akhir tiap rekaman.")
+print("Trimming the first & last \(Int(trimSeconds)) s of each recording.")
 for (file, reason) in rejected { print("  ✘ \(file): \(reason)") }
-if rejected.isEmpty { print("  Semua rekaman lolos pemeriksaan kualitas.") }
+if rejected.isEmpty { print("  All recordings passed the quality check.") }
 guard labels.count >= 2 else {
-    print("Butuh minimal 2 label untuk melatih classifier.")
+    print("Need at least 2 labels to train the classifier.")
     exit(2)
 }
 
 let work = fm.temporaryDirectory.appending(path: "warmup-train-\(UUID().uuidString)")
 defer { try? fm.removeItem(at: work) }
 
-/// Menulis rekaman ke struktur `labeledDirectories` CreateML: <root>/<label>/<sesi>.csv
+/// Writes recordings in the CreateML `labeledDirectories` layout: <root>/<label>/<session>.csv
 @MainActor func writeLabeledDirectory(_ items: [Recording], to root: URL) throws {
     for r in items {
         let dir = root.appending(path: r.name.label)
@@ -98,7 +98,7 @@ defer { try? fm.removeItem(at: work) }
 }
 
 @MainActor func parameters(validation: URL?) -> MLActivityClassifier.ModelParameters {
-    // 2 detik × 50 Hz = 100 sampel per jendela (FR-P03)
+    // 2 seconds × 50 Hz = 100 samples per window (FR-P03)
     if let validation {
         return MLActivityClassifier.ModelParameters(validationData: .labeledDirectories(at: validation),
                                                     batchSize: 32, maximumIterations: iterations, predictionWindowSize: 100)
@@ -108,7 +108,7 @@ defer { try? fm.removeItem(at: work) }
 
 func normalized(_ label: String) -> String { MotionLabel(classLabel: label).rawValue }
 
-/// Baseline sederhana: classifier heuristik pada jendela 2 dtk (hop 1 dtk).
+/// Simple baseline: heuristic classifier on 2 s windows (1 s hop).
 func heuristicReport(_ items: [Recording]) -> ClassificationReport {
     let classifier = HeuristicMotionClassifier()
     var report = ClassificationReport()
@@ -128,11 +128,11 @@ func createMLReport(_ metrics: MLClassifierMetrics) -> ClassificationReport {
     var report = ClassificationReport()
     let frame = metrics.confusionDataFrame
     let names = frame.columns.map(\.name)
-    // CreateML memakai kolom "class" (kebenaran), "predicted_class", dan "count".
+    // CreateML uses the columns "class" (truth), "predicted_class", and "count".
     guard let predictedColumn = names.first(where: { $0.lowercased().contains("predict") }),
           let truthColumn = names.first(where: { ["class", "true_label", "true label", "target"].contains($0.lowercased()) }),
           let countColumn = names.first(where: { $0.lowercased().contains("count") }) else {
-        print("  (format confusion CreateML tak dikenal: \(names))")
+        print("  (unknown CreateML confusion format: \(names))")
         return report
     }
     for row in frame.rows {
@@ -146,7 +146,7 @@ func createMLReport(_ metrics: MLClassifierMetrics) -> ClassificationReport {
 
 // MARK: 3–5. Features, Model, Evaluate
 print("\n== 3. Features ==")
-print("CreateML Activity Classifier: kanal \(featureColumns.joined(separator: ", ")), jendela 100 sampel (2 dtk).")
+print("CreateML Activity Classifier: channels \(featureColumns.joined(separator: ", ")), 100-sample window (2 s).")
 
 print("\n== 4–5. Model & Evaluate ==")
 var modelReport = ClassificationReport()
@@ -156,7 +156,7 @@ var evaluationKind: String
 let knownPeople = people.filter { $0 != "?" }
 if knownPeople.count >= 2 {
     evaluationKind = "leave-one-person-out (\(knownPeople.count) fold)"
-    print("Evaluasi \(evaluationKind): tiap fold, satu orang jadi data uji dan TIDAK ikut dilatih.")
+    print("Evaluation \(evaluationKind): in each fold, one person is the test data and is NOT used for training.")
     for person in knownPeople {
         let train = recordings.filter { $0.person != person }
         let test = recordings.filter { $0.person == person }
@@ -172,12 +172,12 @@ if knownPeople.count >= 2 {
         let foldBaseline = heuristicReport(test)
         modelReport.merge(foldModel)
         baselineReport.merge(foldBaseline)
-        print("  fold \(person): CreateML \(pct(foldModel.accuracy)) | heuristik \(pct(foldBaseline.accuracy)) (n = \(foldModel.total) jendela)")
+        print("  fold \(person): CreateML \(pct(foldModel.accuracy)) | heuristic \(pct(foldBaseline.accuracy)) (n = \(foldModel.total) windows)")
     }
 } else {
-    // Fallback: belum bisa "test on new people" — pisah per sesi.
-    evaluationKind = "per sesi (⚠︎ partisipan < 2: BELUM menguji orang baru, hasil cenderung terlalu optimis)"
-    print("Evaluasi \(evaluationKind)")
+    // Fallback: can't "test on new people" yet — split per session.
+    evaluationKind = "per session (⚠︎ participants < 2: NOT tested on new people, results are likely too optimistic)"
+    print("Evaluation \(evaluationKind)")
     var train: [Recording] = []
     var test: [Recording] = []
     for label in labels {
@@ -196,33 +196,33 @@ if knownPeople.count >= 2 {
 }
 
 print("")
-print(baselineReport.formatted(title: "Baseline heuristik"))
+print(baselineReport.formatted(title: "Heuristic baseline"))
 print("")
 print(modelReport.formatted(title: "CreateML"))
 
-// Model final dengan semua data.
-print("\nMelatih model final dengan semua data…")
+// Final model with all data.
+print("\nTraining the final model on all data…")
 let all = work.appending(path: "all")
 try writeLabeledDirectory(recordings, to: all)
 let finalModel = try MLActivityClassifier(trainingData: .labeledDirectories(at: all),
                                           featureColumns: featureColumns, parameters: parameters(validation: nil))
 let metadata = MLModelMetadata(
     author: "WarmUp Pulse",
-    shortDescription: "Klasifikasi gerakan pemanasan (2 dtk @ 50 Hz). Evaluasi: \(evaluationKind), akurasi \(pct(modelReport.accuracy)).",
+    shortDescription: "Warm-up exercise classification (2 s @ 50 Hz). Evaluation: \(evaluationKind), accuracy \(pct(modelReport.accuracy)).",
     version: "1.0"
 )
 try finalModel.write(to: output, metadata: metadata)
-print("Model tersimpan: \(output.path)")
+print("Model saved: \(output.path)")
 
 let accuracy = modelReport.accuracy ?? 0
 if accuracy < 0.85 {
-    print("\n✘ NFR-03 belum terpenuhi: akurasi \(pct(accuracy)) < 85%. Tambah data / partisipan / variasi gerakan.")
+    print("\n✘ NFR-03 not met: accuracy \(pct(accuracy)) < 85%. Add more data / participants / exercise variation.")
     exit(1)
 }
 if (baselineReport.accuracy ?? 0) >= accuracy {
-    print("\n⚠︎ CreateML tidak lebih baik dari baseline heuristik — pertimbangkan tetap memakai baseline.")
+    print("\n⚠︎ CreateML is not better than the heuristic baseline — consider keeping the baseline.")
 }
-print("\n✔ NFR-03 terpenuhi (\(pct(accuracy)), \(evaluationKind)).")
+print("\n✔ NFR-03 met (\(pct(accuracy)), \(evaluationKind)).")
 #else
-print("warmup-train hanya berjalan di macOS (butuh CreateML).")
+print("warmup-train only runs on macOS (requires CreateML).")
 #endif

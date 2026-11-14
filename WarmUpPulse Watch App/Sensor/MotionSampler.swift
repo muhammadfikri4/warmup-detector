@@ -3,7 +3,7 @@ import Foundation
 import WarmUpCore
 
 /// FR-S03 — CMMotionManager 50 Hz (userAcceleration + rotationRate + gravity).
-/// NFR-01: pemanggil wajib `stop()` begitu Guided Warm-Up selesai.
+/// NFR-01: callers must `stop()` as soon as Guided Warm-Up finishes.
 nonisolated final class MotionSampler: @unchecked Sendable {
     static let sampleRate = 50.0
 
@@ -19,7 +19,7 @@ nonisolated final class MotionSampler: @unchecked Sendable {
     var isAvailable: Bool { manager.isDeviceMotionAvailable }
     var isRunning: Bool { manager.isDeviceMotionActive }
 
-    /// `handler` dipanggil di antrean serial latar belakang (bukan main thread).
+    /// `handler` is called on a background serial queue (not the main thread).
     @discardableResult
     func start(handler: @escaping @Sendable (MotionFrame) -> Void) -> Bool {
         guard manager.isDeviceMotionAvailable else { return false }

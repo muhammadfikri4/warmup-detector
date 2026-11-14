@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pengaturan yang diatur di iPhone lalu diterapkan di watch (WatchConnectivity application context).
+/// Settings configured on iPhone and applied on the watch (WatchConnectivity application context).
 public struct CompanionSettings: Codable, Sendable, Equatable {
     public var useAppleIntelligence = true
     public var voiceGuidance = true
@@ -10,11 +10,31 @@ public struct CompanionSettings: Codable, Sendable, Equatable {
     public var wrist: Wrist = .left
     public var consent = false
     public var scenario: ReferenceScenario = .unknown
-    /// Simpan otomatis data sensor pemanasan terpandu sebagai data latih (butuh consent).
+    /// Automatically save guided warm-up sensor data as training data (requires consent).
     public var autoCollect = false
     public var updatedAt = Date(timeIntervalSince1970: 0)
 
     public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case useAppleIntelligence, voiceGuidance, zoneMethod, studyMode, participant, wrist, consent, scenario, autoCollect, updatedAt
+    }
+
+    /// Missing keys (settings saved by an older version) fall back to defaults.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = CompanionSettings()
+        useAppleIntelligence = try c.decodeIfPresent(Bool.self, forKey: .useAppleIntelligence) ?? d.useAppleIntelligence
+        voiceGuidance = try c.decodeIfPresent(Bool.self, forKey: .voiceGuidance) ?? d.voiceGuidance
+        zoneMethod = try c.decodeIfPresent(ZoneMethod.self, forKey: .zoneMethod) ?? d.zoneMethod
+        studyMode = try c.decodeIfPresent(Bool.self, forKey: .studyMode) ?? d.studyMode
+        participant = try c.decodeIfPresent(String.self, forKey: .participant) ?? d.participant
+        wrist = try c.decodeIfPresent(Wrist.self, forKey: .wrist) ?? d.wrist
+        consent = try c.decodeIfPresent(Bool.self, forKey: .consent) ?? d.consent
+        scenario = try c.decodeIfPresent(ReferenceScenario.self, forKey: .scenario) ?? d.scenario
+        autoCollect = try c.decodeIfPresent(Bool.self, forKey: .autoCollect) ?? d.autoCollect
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? d.updatedAt
+    }
 
     public func encoded() throws -> Data {
         let e = JSONEncoder()
@@ -29,7 +49,7 @@ public struct CompanionSettings: Codable, Sendable, Equatable {
     }
 }
 
-/// Status watch yang dilaporkan balik ke iPhone.
+/// Watch status reported back to iPhone.
 public struct WatchStatus: Codable, Sendable, Equatable {
     public var classifierName: String
     public var learnedModelVersion: Int?
@@ -56,7 +76,7 @@ public struct WatchStatus: Codable, Sendable, Equatable {
     }
 }
 
-/// Kunci pesan WatchConnectivity antara iPhone dan watch.
+/// WatchConnectivity message keys between iPhone and watch.
 public enum SyncKey {
     public static let kind = "kind"
     public static let data = "data"
@@ -70,6 +90,6 @@ public enum SyncKey {
 }
 
 extension RecordingName {
-    /// Rekaman otomatis dari pemanasan terpandu ditandai dengan id berawalan `auto-`.
+    /// Automatic recordings from guided warm-ups are marked with an id prefixed `auto-`.
     public var isAuto: Bool { id.hasPrefix("auto-") }
 }

@@ -6,7 +6,7 @@ enum AppSettings {
         static let useAppleIntelligence = "useAppleIntelligence"
         static let voiceGuidance = "voiceGuidance"
         static let zoneMethod = "zoneMethod"
-        // Mode Studi — dipakai juga oleh perekam data latih.
+        // Study Mode — also used by the training data recorder.
         static let studyMode = "studyMode"
         static let participant = "studyParticipant"
         static let wrist = "studyWrist"
@@ -30,7 +30,7 @@ enum AppSettings {
         ])
     }
 
-    /// Menerapkan pengaturan dari iPhone (sumber kebenaran pengaturan).
+    /// Applies settings from iPhone (the source of truth for settings).
     static func apply(_ s: CompanionSettings) {
         defaults.set(s.useAppleIntelligence, forKey: Key.useAppleIntelligence)
         defaults.set(s.voiceGuidance, forKey: Key.voiceGuidance)
@@ -49,7 +49,7 @@ enum AppSettings {
         return t > 0 ? Date(timeIntervalSinceReferenceDate: t) : nil
     }
 
-    /// Rekam otomatis data pemanasan terpandu hanya bila diizinkan DAN partisipan setuju.
+    /// Auto-record guided warm-up data only when enabled AND the participant has consented.
     static var isAutoCollecting: Bool { defaults.bool(forKey: Key.autoCollect) && consent }
 
     private static var defaults: UserDefaults { .standard }
@@ -70,6 +70,6 @@ enum AppSettings {
         set { defaults.set(newValue.rawValue, forKey: Key.scenario) }
     }
 
-    /// Log evaluasi hanya ditulis bila Mode Studi aktif DAN partisipan sudah setuju.
+    /// The evaluation log is only written when Study Mode is on AND the participant has consented.
     static var isStudyLogging: Bool { studyMode && consent }
 }

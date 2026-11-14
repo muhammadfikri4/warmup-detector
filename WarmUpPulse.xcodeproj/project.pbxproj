@@ -288,24 +288,24 @@
 				CODE_SIGN_ENTITLEMENTS = Config/WarmUpPulse.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 94SXNQ884C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WarmUpPulse-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "WarmUp Pulse";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "WarmUp Pulse membaca detak jantung, detak istirahat, energi aktif, tidur, dan usia untuk menilai apakah tubuhmu sudah siap berolahraga.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "WarmUp Pulse menyimpan sesi pemanasan dan latihanmu ke aplikasi Kesehatan.";
-				INFOPLIST_KEY_NSMotionUsageDescription = "WarmUp Pulse membaca akselerometer dan giroskop untuk mengenali dan menghitung gerakan pemanasan.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "WarmUp Pulse reads your heart rate, resting heart rate, active energy, sleep, and age to check whether your body is ready to work out.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "WarmUp Pulse saves your warm-up and workout sessions to the Health app.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "WarmUp Pulse reads the accelerometer and gyroscope to recognize and count your warm-up moves.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKApplication = YES;
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.example.warmuppulse;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = id.muhammadfikri.warmuppulse;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.warmuppulse.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = id.muhammadfikri.warmuppulse.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -324,24 +324,24 @@
 				CODE_SIGN_ENTITLEMENTS = Config/WarmUpPulse.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 94SXNQ884C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WarmUpPulse-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "WarmUp Pulse";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "WarmUp Pulse membaca detak jantung, detak istirahat, energi aktif, tidur, dan usia untuk menilai apakah tubuhmu sudah siap berolahraga.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "WarmUp Pulse menyimpan sesi pemanasan dan latihanmu ke aplikasi Kesehatan.";
-				INFOPLIST_KEY_NSMotionUsageDescription = "WarmUp Pulse membaca akselerometer dan giroskop untuk mengenali dan menghitung gerakan pemanasan.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "WarmUp Pulse reads your heart rate, resting heart rate, active energy, sleep, and age to check whether your body is ready to work out.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "WarmUp Pulse saves your warm-up and workout sessions to the Health app.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "WarmUp Pulse reads the accelerometer and gyroscope to recognize and count your warm-up moves.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKApplication = YES;
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.example.warmuppulse;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = id.muhammadfikri.warmuppulse;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.warmuppulse.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = id.muhammadfikri.warmuppulse.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -359,7 +359,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 94SXNQ884C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "WarmUp Pulse";
@@ -372,7 +372,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.warmuppulse;
+				PRODUCT_BUNDLE_IDENTIFIER = id.muhammadfikri.warmuppulse;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -390,7 +390,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 94SXNQ884C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "WarmUp Pulse";
@@ -403,7 +403,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.warmuppulse;
+				PRODUCT_BUNDLE_IDENTIFIER = id.muhammadfikri.warmuppulse;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

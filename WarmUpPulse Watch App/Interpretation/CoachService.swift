@@ -2,15 +2,15 @@ import Foundation
 import FoundationModels
 import WarmUpCore
 
-/// Pilar 3 — Interpretation (FR-I01 … FR-I04).
+/// Pillar 3 — Interpretation (FR-I01 … FR-I04).
 ///
-/// Catatan platform: di watchOS 27, `SystemLanguageModel` (on-device) TIDAK tersedia; yang tersedia adalah
-/// `PrivateCloudComputeLanguageModel` (Apple Private Cloud Compute — server Apple, bukan pihak ketiga).
-/// Karena itu:
-/// 1. Teks template deterministik selalu tampil lebih dulu (instan, offline).
-/// 2. Bila diizinkan pengguna & tersedia, Apple Intelligence menyempurnakan teks/rencana di belakang layar.
-/// 3. Hanya angka turunan yang dikirim (HR, RHR, jam tidur, jenis olahraga, jam) — tanpa identitas.
-/// 4. Semua keluaran AI melewati `SafetyGuardrail` + `WarmUpPlanner` (NFR-04); gagal → tetap template.
+/// Platform note: on watchOS 27, the on-device `SystemLanguageModel` is NOT available; what is available is
+/// `PrivateCloudComputeLanguageModel` (Apple Private Cloud Compute — Apple servers, not a third party).
+/// Therefore:
+/// 1. Deterministic template text always shows first (instant, offline).
+/// 2. If the user allows it and it's available, Apple Intelligence refines the text/plan in the background.
+/// 3. Only derived numbers are sent (HR, RHR, sleep hours, workout type, hour) — no identity.
+/// 4. All AI output goes through `SafetyGuardrail` + `WarmUpPlanner` (NFR-04); on failure → keep the template.
 final class CoachService {
     struct PlanSuggestion: Sendable {
         var message: String
@@ -22,16 +22,16 @@ final class CoachService {
 
     var availabilityText: String {
         switch PrivateCloudComputeLanguageModel().availability {
-        case .available: "Tersedia"
-        case .unavailable(.deviceNotEligible): "Perangkat tidak mendukung"
-        case .unavailable(.systemNotReady): "Belum siap"
-        case .unavailable: "Tidak tersedia"
+        case .available: "Available"
+        case .unavailable(.deviceNotEligible): "Device not supported"
+        case .unavailable(.systemNotReady): "Not ready yet"
+        case .unavailable: "Unavailable"
         }
     }
 
     private var canUseAI: Bool { isEnabled && PrivateCloudComputeLanguageModel().isAvailable }
 
-    /// FR-I01 + FR-I02 + FR-I03: penjelasan, durasi, urutan gerakan, dan cue suara.
+    /// FR-I01 + FR-I02 + FR-I03: explanation, duration, exercise order, and voice cues.
     func suggestPlan(for context: CoachContext, timeout: TimeInterval = 8) async -> PlanSuggestion? {
         guard canUseAI else { return nil }
         let prompt = Self.planPrompt(context)
@@ -49,14 +49,15 @@ final class CoachService {
         return PlanSuggestion(message: message, plan: plan, cues: cues.count == plan.steps.count ? cues : [])
     }
 
-    /// FR-I04: catatan singkat untuk riwayat latihan.
+    /// FR-I04: short note for workout history.
     func summaryNote(_ summary: WarmUpSummary, workout: WorkoutKind) async -> String {
         let fallback = TemplateCoach.summary(summary)
         guard canUseAI, !summary.skipped else { return fallback }
         let prompt = """
-        Rangkum respons tubuh selama pemanasan sebelum \(workout.displayName) dalam 1 kalimat (maks 160 karakter).
+        In English, summarize the body's response during the warm-up before \(workout.displayName) in 1 short, \
+        casual, encouraging sentence (max 160 characters).
         Data: \(fallback)
-        Laju kenaikan HR: \(summary.riseBpmPerMinute.map { String(format: "%.1f bpm/menit", $0) } ?? "tidak diketahui").
+        HR rise rate: \(summary.riseBpmPerMinute.map { String(format: "%.1f bpm/min", $0) } ?? "unknown").
         """
         let text = await withTimeout(8) {
             let session = LanguageModelSession(model: PrivateCloudComputeLanguageModel(),
@@ -70,32 +71,33 @@ final class CoachService {
         let r = ctx.recovery
         let a = ctx.assessment
         return """
-        Pengguna akan \(r.workout.displayName) pukul \(r.startHour).00 dan belum pemanasan.
-        HR saat ini: \(a.heartRate.map { "\(Int($0)) bpm" } ?? "belum terbaca"); zona siap: \(a.zones.rangeText).
-        RHR pagi ini: \(Int(r.physiology.restingHR)) bpm\(r.restingHRBaseline.map { " (rata-rata 30 hari \(Int($0)) bpm)" } ?? "").
-        Tidur semalam: \(r.sleepHours.map { String(format: "%.1f jam", $0) } ?? "tidak ada data").
-        HRV (SDNN): \(r.hrvSDNN.map { "\(Int($0)) ms" } ?? "tidak ada data")\(r.hrvBaseline.map { " (rata-rata 30 hari \(Int($0)) ms)" } ?? "").
-        Rencana dasar: \(ctx.plan.durationMinutes) menit, \(ctx.plan.exerciseListText).
-        Penyesuaian dari data pemulihan: \(ctx.plan.adjustments.isEmpty ? "tidak ada" : String(describing: ctx.plan.adjustments)).
-        Pilih 2–3 gerakan paling relevan dengan olahraga ini (fokus Arm Circles & Torso Twist untuk raket/beban, \
-        March in Place untuk lari/sepeda), tentukan durasi 3–5 menit (lebih panjang bila kurang tidur atau pagi hari), \
-        tulis penjelasan ramah maks 2 kalimat, dan satu instruksi suara singkat per gerakan.
+        The user is about to do \(r.workout.displayName) at \(r.startHour):00 and hasn't warmed up yet.
+        Current HR: \(a.heartRate.map { "\(Int($0)) bpm" } ?? "not read yet"); ready zone: \(a.zones.rangeText).
+        Resting HR this morning: \(Int(r.physiology.restingHR)) bpm\(r.restingHRBaseline.map { " (30-day average \(Int($0)) bpm)" } ?? "").
+        Sleep last night: \(r.sleepHours.map { String(format: "%.1f h", $0) } ?? "no data").
+        HRV (SDNN): \(r.hrvSDNN.map { "\(Int($0)) ms" } ?? "no data")\(r.hrvBaseline.map { " (30-day average \(Int($0)) ms)" } ?? "").
+        Base plan: \(ctx.plan.durationMinutes) min, \(ctx.plan.exerciseListText).
+        Adjustments from recovery data: \(ctx.plan.adjustments.isEmpty ? "none" : String(describing: ctx.plan.adjustments)).
+        Pick the 2–3 exercises most relevant to this workout (focus on Arm Circles & Torso Twist for racket/strength, \
+        March in Place for running/cycling), set a duration of 3–5 minutes (longer after poor sleep or in the morning), \
+        write a friendly explanation of max 2 sentences, and one short voice cue per exercise.
+        Write everything in English: casual, short, and encouraging.
         """
     }
 }
 
 @Generable
 struct AIWarmUpPlan {
-    @Guide(description: "Penjelasan ramah maks 2 kalimat mengapa perlu pemanasan, menyebut angka HR yang diberikan.")
+    @Guide(description: "A friendly, casual, encouraging explanation in English (max 2 short sentences) of why a warm-up is needed, mentioning the given HR numbers.")
     var explanation: String
 
-    @Guide(description: "Durasi pemanasan dalam menit.", .range(3...5))
+    @Guide(description: "Warm-up duration in minutes.", .range(3...5))
     var durationMinutes: Int
 
-    @Guide(description: "Urutan gerakan pemanasan.", .minimumCount(2), .maximumCount(3))
+    @Guide(description: "Order of warm-up exercises.", .minimumCount(2), .maximumCount(3))
     var exercises: [AIExercise]
 
-    @Guide(description: "Satu instruksi suara singkat (maks 12 kata) untuk tiap gerakan, urutan sama dengan exercises.")
+    @Guide(description: "One short, upbeat English voice cue (max 12 words) per exercise, in the same order as exercises.")
     var cues: [String]
 }
 
@@ -114,7 +116,7 @@ enum AIExercise {
     }
 }
 
-/// Menjalankan operasi async dengan batas waktu; `nil` bila timeout atau error.
+/// Runs an async operation with a time limit; `nil` on timeout or error.
 func withTimeout<T: Sendable>(_ seconds: TimeInterval, _ operation: @escaping @Sendable () async throws -> T) async -> T? {
     await withTaskGroup(of: T?.self) { group in
         group.addTask { try? await operation() }

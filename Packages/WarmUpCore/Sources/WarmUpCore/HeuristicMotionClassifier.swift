@@ -1,15 +1,15 @@
 import Foundation
 
-/// Classifier berbasis aturan sebagai fallback sampai `WarmUpClassifier.mlmodel` (CreateML) dilatih.
-/// Akurasinya TIDAK ditargetkan memenuhi NFR-03 (≥ 85%); itu tugas model CreateML.
+/// Rule-based classifier used as the fallback until `WarmUpClassifier.mlmodel` (CreateML) is trained.
+/// Its accuracy is NOT expected to meet NFR-03 (≥ 85%); that is the CreateML model's job.
 ///
-/// Intuisi fisik (jam di pergelangan kiri/kanan):
-/// - Arm Circles  → orientasi pergelangan berputar penuh → rentang gravitasi besar, rotasi tinggi.
-/// - Torso Twist  → pergelangan berayun horizontal → rotasi didominasi sumbu vertikal (yaw).
-/// - March/High Knees → ayunan lengan ritmis → akselerasi sedang, rotasi non-yaw.
-/// - Idle → akselerasi & rotasi hampir nol.
+/// Physical intuition (watch on the left/right wrist):
+/// - Arm Circles  → wrist orientation rotates fully → large gravity range, high rotation.
+/// - Torso Twist  → wrist swings horizontally → rotation dominated by the vertical axis (yaw).
+/// - March/High Knees → rhythmic arm swing → moderate acceleration, non-yaw rotation.
+/// - Idle → acceleration & rotation near zero.
 public final class HeuristicMotionClassifier: MotionClassifying {
-    public let name = "Heuristik (fallback)"
+    public let name = "Heuristic (fallback)"
     public let windowSize: Int
 
     public init(windowSize: Int = 100) {
@@ -36,7 +36,7 @@ public final class HeuristicMotionClassifier: MotionClassifying {
         return best.1 >= 0.5 ? best : (.other, 1 - best.1)
     }
 
-    /// Sigmoid: 0,5 tepat di ambang; mendekati 1 bila nilai jauh di atas ambang (atau di bawah bila scale negatif).
+    /// Sigmoid: 0.5 exactly at the threshold; approaches 1 when the value is far above it (or below, if scale is negative).
     private static func above(_ threshold: Double, _ value: Double, scale: Double) -> Double {
         1 / (1 + exp(-(value - threshold) / scale))
     }

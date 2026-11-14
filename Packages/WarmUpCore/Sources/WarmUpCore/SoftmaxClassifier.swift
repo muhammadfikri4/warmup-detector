@@ -1,8 +1,8 @@
 import Accelerate
 import Foundation
 
-/// Pipeline tahap 4 (Model): multinomial logistic regression — "start simple".
-/// Dilatih di iPhone, dikirim ke watch sebagai JSON kecil (tidak perlu kompilasi Core ML di watch).
+/// Pipeline stage 4 (Model): multinomial logistic regression — "start simple".
+/// Trained on iPhone and sent to the watch as a small JSON file (no Core ML compilation needed on the watch).
 public struct SoftmaxModel: Codable, Sendable, Equatable {
     public struct Info: Codable, Sendable, Equatable {
         public var trainedAt: Date
@@ -12,13 +12,13 @@ public struct SoftmaxModel: Codable, Sendable, Equatable {
         public var accuracy: Double?
     }
 
-    /// Versi = detik epoch saat dilatih.
+    /// Version = epoch seconds at training time.
     public var version: Int
     public var labels: [String]
     public var featureNames: [String]
     public var means: [Double]
     public var scales: [Double]
-    /// [kelas][fitur]
+    /// [class][feature]
     public var weights: [[Double]]
     public var biases: [Double]
     public var info: Info
@@ -53,8 +53,8 @@ public struct SoftmaxModel: Codable, Sendable, Equatable {
     }
 }
 
-/// Gradient descent full-batch dengan regularisasi L2. Perkalian matriks memakai Accelerate (vDSP)
-/// supaya tetap cepat walau build Debug.
+/// Full-batch gradient descent with L2 regularization. Matrix multiplication uses Accelerate (vDSP)
+/// so it stays fast even in Debug builds.
 public struct SoftmaxTrainer: Sendable {
     public var epochs = 300
     public var learningRate = 0.5
@@ -68,7 +68,7 @@ public struct SoftmaxTrainer: Sendable {
         let n = features.count, f = MotionFeatureVector.names.count, k = classes.count
         precondition(n > 0 && features.allSatisfy { $0.count == f })
 
-        // Standarisasi fitur.
+        // Standardize features.
         var means = [Double](repeating: 0, count: f)
         var scales = [Double](repeating: 1, count: f)
         for j in 0..<f {
@@ -83,7 +83,7 @@ public struct SoftmaxTrainer: Sendable {
 
         let classIndex = Dictionary(uniqueKeysWithValues: classes.enumerated().map { ($1, $0) })
         let y = labels.map { classIndex[$0]! }
-        // Bobot sampel × penyeimbang kelas (kelas jarang tidak kalah oleh kelas dominan).
+        // Sample weight × class balancing (rare classes aren't drowned out by dominant ones).
         var classCounts = [Double](repeating: 0, count: k)
         for c in y { classCounts[c] += 1 }
         var w = (0..<n).map { (sampleWeights?[$0] ?? 1) * Double(n) / (Double(k) * classCounts[y[$0]]) }
@@ -125,11 +125,11 @@ public struct SoftmaxTrainer: Sendable {
     }
 }
 
-/// Classifier watch yang memakai model hasil training di iPhone.
+/// Watch classifier that uses the model trained on iPhone.
 public final class LearnedMotionClassifier: MotionClassifying {
     public let model: SoftmaxModel
     public let windowSize = 100
-    public var name: String { "Model iPhone v\(model.version)" }
+    public var name: String { "iPhone model v\(model.version)" }
 
     public init?(model: SoftmaxModel) {
         guard model.isCompatible else { return nil }

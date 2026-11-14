@@ -3,10 +3,10 @@ import HealthKit
 import Observation
 import WarmUpCore
 
-/// FR-S01 & FR-S02 — HKWorkoutSession + HKLiveWorkoutBuilder untuk aliran HR berlatensi rendah.
+/// FR-S01 & FR-S02 — HKWorkoutSession + HKLiveWorkoutBuilder for a low-latency HR stream.
 ///
-/// Satu sesi workout menaungi seluruh alur: pengecekan → pemanasan (sub-aktivitas) → latihan inti.
-/// Dengan begitu pemanasan ikut tercatat di riwayat workout sebagai segmen terpisah.
+/// One workout session covers the whole flow: check → warm-up (sub-activity) → main workout.
+/// That way the warm-up is recorded in workout history as a separate segment.
 @Observable
 final class WorkoutSessionManager: NSObject {
     private let store: HKHealthStore
@@ -48,7 +48,7 @@ final class WorkoutSessionManager: NSObject {
         try await builder.beginCollection(at: start)
     }
 
-    /// Menunggu sampel HR live pertama (maks `timeout` detik) — bagian dari anggaran ≤ 3 detik FR-P01.
+    /// Waits for the first live HR sample (up to `timeout` seconds) — part of FR-P01's ≤ 3-second budget.
     func waitForHeartRate(timeout: TimeInterval) async -> HeartRateSample? {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -78,7 +78,7 @@ final class WorkoutSessionManager: NSObject {
         try? await builder?.addMetadata(metadata)
     }
 
-    /// Mengakhiri & menyimpan workout ke HealthKit.
+    /// Ends & saves the workout to HealthKit.
     @discardableResult
     func end() async -> HKWorkout? {
         guard let session, let builder else { return nil }
@@ -96,7 +96,7 @@ final class WorkoutSessionManager: NSObject {
         }
     }
 
-    /// Membatalkan tanpa menyimpan (mis. pengguna kembali ke menu).
+    /// Cancels without saving (e.g. the user goes back to the menu).
     func discard() {
         session?.end()
         builder?.discardWorkout()

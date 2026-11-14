@@ -1,8 +1,8 @@
 import Foundation
 import WarmUpCore
 
-/// Menyimpan log evaluasi (JSON Lines) ke Documents/evaluation/sessions.jsonl.
-/// Data tetap di jam; ambil lewat Xcode › Download Container, lalu jalankan `warmup-eval`.
+/// Saves the evaluation log (JSON Lines) to Documents/evaluation/sessions.jsonl.
+/// Data stays on the watch; pull it via Xcode › Download Container, then run `warmup-eval`.
 enum SessionLogger {
     static var directory: URL { URL.documentsDirectory.appending(path: "evaluation", directoryHint: .isDirectory) }
     static var fileURL: URL { directory.appending(path: "sessions.jsonl") }

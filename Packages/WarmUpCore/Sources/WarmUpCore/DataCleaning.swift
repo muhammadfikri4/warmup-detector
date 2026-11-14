@@ -1,11 +1,11 @@
 import Foundation
 
-/// Laporan kualitas data HR — supaya celah & data yang dibuang tetap terlihat (pipeline tahap 2: Clean).
+/// HR data quality report — keeps gaps & discarded data visible (pipeline stage 2: Clean).
 public struct HeartRateQuality: Codable, Sendable, Equatable {
     public var inputCount: Int
     public var removedOutOfRange: Int
     public var removedSpikes: Int
-    /// Interval tanpa sampel yang lebih panjang dari `gapThreshold`. Celah TIDAK diisi/interpolasi.
+    /// Intervals without samples longer than `gapThreshold`. Gaps are NOT filled/interpolated.
     public var gaps: [DateInterval]
 
     public init(inputCount: Int = 0, removedOutOfRange: Int = 0, removedSpikes: Int = 0, gaps: [DateInterval] = []) {
@@ -19,11 +19,11 @@ public struct HeartRateQuality: Codable, Sendable, Equatable {
     public var longestGapMinutes: Double { (gaps.map(\.duration).max() ?? 0) / 60 }
 }
 
-/// Membersihkan sampel HR:
-/// 1. Filter ke rentang fisiologis tubuh (default 35–220 bpm).
-/// 2. Buang spike terisolasi: satu sampel yang beda > 30 bpm dari tetangga kiri & kanan
-///    (≤ 60 dtk), sementara kedua tetangga saling konsisten — ciri artefak sensor (jam longgar).
-/// 3. Catat celah > 150 dtk tanpa mengisinya.
+/// Cleans HR samples:
+/// 1. Filter to the body's physiological range (default 35–220 bpm).
+/// 2. Drop isolated spikes: a single sample that differs by > 30 bpm from both its left & right neighbors
+///    (≤ 60 s), while the two neighbors agree with each other — a sign of a sensor artifact (loose watch).
+/// 3. Record gaps > 150 s without filling them.
 public struct HeartRateCleaner: Sendable {
     public var validRange: ClosedRange<Double> = 35...220
     public var spikeThreshold: Double = 30
@@ -69,12 +69,12 @@ public struct HeartRateCleaner: Sendable {
     }
 }
 
-/// Pemeriksaan kualitas satu rekaman gerak (dipakai script training).
+/// Quality check for one motion recording (used by the training script).
 public struct MotionRecordingQuality: Sendable, Equatable {
     public var sampleCount: Int
     public var duration: TimeInterval
     public var effectiveHz: Double
-    /// Jumlah jeda antar-sampel > 0,1 dtk (sampel hilang).
+    /// Number of inter-sample gaps > 0.1 s (dropped samples).
     public var droppedGaps: Int
     public var nonFiniteSamples: Int
 
@@ -88,12 +88,12 @@ public struct MotionRecordingQuality: Sendable, Equatable {
         }.count
     }
 
-    /// Alasan penolakan, atau `nil` bila rekaman layak dipakai.
+    /// Rejection reason, or `nil` when the recording is usable.
     public func rejectionReason(minimumDuration: TimeInterval = 5, minimumHz: Double = 40) -> String? {
-        if nonFiniteSamples > 0 { return "\(nonFiniteSamples) sampel bukan angka" }
-        if duration < minimumDuration { return String(format: "durasi %.1f dtk < %.0f dtk", duration, minimumDuration) }
+        if nonFiniteSamples > 0 { return "\(nonFiniteSamples) non-numeric samples" }
+        if duration < minimumDuration { return String(format: "duration %.1f s < %.0f s", duration, minimumDuration) }
         if effectiveHz < minimumHz { return String(format: "sampling %.0f Hz < %.0f Hz", effectiveHz, minimumHz) }
-        if Double(droppedGaps) > Double(sampleCount) * 0.05 { return "\(droppedGaps) celah sampel hilang (> 5%)" }
+        if Double(droppedGaps) > Double(sampleCount) * 0.05 { return "\(droppedGaps) dropped-sample gaps (> 5%)" }
         return nil
     }
 }

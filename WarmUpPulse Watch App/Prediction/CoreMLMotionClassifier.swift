@@ -2,14 +2,14 @@ import CoreML
 import Foundation
 import WarmUpCore
 
-/// FR-P03 — Inferensi on-device `WarmUpClassifier` (Activity Classifier dari CreateML).
+/// FR-P03 — On-device inference with `WarmUpClassifier` (a CreateML Activity Classifier).
 ///
-/// Model dimuat secara dinamis: cukup taruh `WarmUpClassifier.mlmodel` di folder
-/// "WarmUpPulse Watch App" dan Xcode akan mengompilasinya. Selama model belum ada,
-/// `ClassifierFactory` memakai `HeuristicMotionClassifier`.
+/// The model is loaded dynamically: just drop `WarmUpClassifier.mlmodel` into the
+/// "WarmUpPulse Watch App" folder and Xcode compiles it. Until the model exists,
+/// `ClassifierFactory` uses `HeuristicMotionClassifier`.
 ///
-/// Nama kolom fitur yang dikenali (huruf besar/kecil & underscore diabaikan):
-/// acc_x/y/z, rot_x/y/z, grav_x/y/z — sama dengan header CSV dari layar Rekam Data.
+/// Recognized feature column names (case & underscores ignored):
+/// acc_x/y/z, rot_x/y/z, grav_x/y/z — same as the CSV header from the Record Data screen.
 nonisolated final class CoreMLMotionClassifier: MotionClassifying {
     let name = "CoreML · WarmUpClassifier"
     let windowSize: Int
@@ -93,7 +93,7 @@ nonisolated final class CoreMLMotionClassifier: MotionClassifying {
     }
 }
 
-/// Prioritas: model kiriman iPhone → model CoreML bawaan (jalur CreateML di Mac) → heuristik.
+/// Priority: model sent from iPhone → bundled CoreML model (CreateML path on Mac) → heuristic.
 enum ClassifierFactory {
     nonisolated static func make() -> any MotionClassifying {
         if let model = ModelStore.load(), let learned = LearnedMotionClassifier(model: model) { return learned }

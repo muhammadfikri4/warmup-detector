@@ -1,11 +1,11 @@
 import Foundation
 
-/// Pilar 2 — Repetition Counting & Anti-Cheat (FR-P04) dan Milestone Completion (FR-P05).
+/// Pillar 2 — Repetition Counting & Anti-Cheat (FR-P04) and Milestone Completion (FR-P05).
 ///
-/// - Repetisi/durasi aktif hanya bertambah bila prediksi terakhir = gerakan yang diinstruksikan
-///   dengan confidence ≥ 80%.
-/// - Diam (Idle) > 5 detik → hitungan dijeda + event pengingat (diulang tiap `reminderInterval`).
-/// - Target tercapai → `stepCompleted`, lalu otomatis pindah ke gerakan berikutnya.
+/// - Reps/active duration only increase when the latest prediction = the instructed exercise
+///   with confidence ≥ 80%.
+/// - Idle > 5 seconds → counting paused + reminder event (repeated every `reminderInterval`).
+/// - Target reached → `stepCompleted`, then automatically move on to the next exercise.
 public final class GuidedWarmUpEngine {
     public enum Event: Sendable, Equatable {
         case stepStarted(index: Int)
@@ -21,7 +21,7 @@ public final class GuidedWarmUpEngine {
         public var minimumConfidence: Double = 0.8
         public var idleTimeout: TimeInterval = 5
         public var reminderInterval: TimeInterval = 10
-        /// Prediksi lebih tua dari ini dianggap kedaluwarsa (tidak membuka gerbang hitungan).
+        /// Predictions older than this are stale (they don't open the counting gate).
         public var predictionMaxAge: TimeInterval = 1.5
         public init() {}
     }
@@ -41,7 +41,7 @@ public final class GuidedWarmUpEngine {
     private var lastReportedSecond = -1
 
     public init(plan: WarmUpPlan, configuration: Configuration = Configuration()) {
-        precondition(!plan.steps.isEmpty, "Rencana pemanasan tidak boleh kosong")
+        precondition(!plan.steps.isEmpty, "Warm-up plan must not be empty")
         self.plan = plan
         self.configuration = configuration
         self.detector = RepetitionDetector(exercise: plan.steps[0].exercise)
@@ -49,7 +49,7 @@ public final class GuidedWarmUpEngine {
 
     public var currentStep: WarmUpStep? { isFinished ? nil : plan.steps[currentIndex] }
 
-    /// Gerbang anti-cheat.
+    /// Anti-cheat gate.
     public func isMatching(at time: TimeInterval) -> Bool {
         guard let step = currentStep, let p = lastPrediction else { return false }
         return p.label == MotionLabel(exercise: step.exercise)
@@ -95,7 +95,7 @@ public final class GuidedWarmUpEngine {
 
         switch step.target {
         case .reps(let target):
-            // Detektor selalu diberi sampel agar fasenya tetap sinkron; hitungan hanya bertambah bila lolos gerbang.
+            // The detector always gets samples so its phase stays in sync; the count only increases when the gate passes.
             guard detector.process(frame), counting else { return [] }
             progressValue += 1
             var events: [Event] = [.progress(index: currentIndex, value: progressValue, target: Double(target))]

@@ -2,7 +2,7 @@ import Foundation
 import HealthKit
 import WarmUpCore
 
-/// FR-S02 (riwayat 10 menit HR & Active Energy) dan FR-S04 (RHR, tidur, usia).
+/// FR-S02 (10-minute HR & Active Energy history) and FR-S04 (RHR, sleep, age).
 final class HealthDataService {
     let store = HKHealthStore()
 
@@ -61,7 +61,7 @@ final class HealthDataService {
                                hrvSDNN: await hrv, hrvBaseline: await hrvBaseline)
     }
 
-    /// HRV (SDNN, ms) terbaru dalam 48 jam — Apple Watch mengukurnya beberapa kali sehari / saat tidur.
+    /// Latest HRV (SDNN, ms) within 48 hours — Apple Watch measures it a few times a day / during sleep.
     private func latestHRV(now: Date) async -> Double? {
         let start = now.addingTimeInterval(-48 * 3600)
         let descriptor = HKSampleQueryDescriptor(
@@ -72,7 +72,7 @@ final class HealthDataService {
         return try? await descriptor.result(for: store).first?.quantity.doubleValue(for: .secondUnit(with: .milli))
     }
 
-    /// Baseline pribadi: rata-rata HRV 30 hari.
+    /// Personal baseline: 30-day average HRV.
     private func hrvBaseline(now: Date) async -> Double? {
         let start = Calendar.current.date(byAdding: .day, value: -30, to: now)!
         let descriptor = HKStatisticsQueryDescriptor(
@@ -101,7 +101,7 @@ final class HealthDataService {
         return try? await descriptor.result(for: store)?.averageQuantity()?.doubleValue(for: bpmUnit)
     }
 
-    /// Total tidur (gabungan interval tanpa tumpang tindih antar sumber) sejak pukul 18.00 kemarin.
+    /// Total sleep (merged, non-overlapping intervals across sources) since 6 PM yesterday.
     private func sleepHoursLastNight(now: Date) async -> Double? {
         let calendar = Calendar.current
         let start = calendar.date(bySettingHour: 18, minute: 0, second: 0,

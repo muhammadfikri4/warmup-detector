@@ -1,7 +1,7 @@
 import Foundation
 
-/// Menghitung siklus (1 siklus = 1 repetisi) dari sinyal skalar memakai zero-crossing dengan histeresis.
-/// Satu repetisi dihitung saat sinyal naik melewati +ambang setelah sebelumnya turun di bawah −ambang.
+/// Counts cycles (1 cycle = 1 rep) in a scalar signal using zero-crossing with hysteresis.
+/// A rep is counted when the signal rises above +threshold after previously dropping below −threshold.
 public struct CycleCounter: Sendable {
     public var minimumAmplitude: Double
     public var minimumPeriod: TimeInterval
@@ -17,7 +17,7 @@ public struct CycleCounter: Sendable {
         self.minimumPeriod = minimumPeriod
     }
 
-    /// Mengembalikan `true` jika sampel ini menutup satu siklus.
+    /// Returns `true` when this sample closes a cycle.
     public mutating func process(_ value: Double, at time: TimeInterval) -> Bool {
         smoothed = baseline == nil ? value : smoothed + 0.3 * (value - smoothed)
         baseline = baseline.map { $0 + 0.01 * (smoothed - $0) } ?? value
@@ -38,7 +38,7 @@ public struct CycleCounter: Sendable {
     public mutating func reset() { self = CycleCounter(minimumAmplitude: minimumAmplitude, minimumPeriod: minimumPeriod) }
 }
 
-/// Memilih sinyal yang paling informatif per gerakan lalu menghitung repetisinya.
+/// Picks the most informative signal per exercise and counts its reps.
 public struct RepetitionDetector: Sendable {
     public let exercise: Exercise
     private var counter: CycleCounter
@@ -60,10 +60,10 @@ public struct RepetitionDetector: Sendable {
         let value: Double
         switch exercise {
         case .armCircles:
-            // Satu putaran lengan = satu siklus penuh komponen gravitasi pada sumbu yang paling bervariasi.
+            // One arm circle = one full cycle of the gravity component on the most variable axis.
             value = frame.gravity[dominantAxis(frame.gravity)]
         case .torsoTwist:
-            // Kiri + kanan = satu siklus kecepatan yaw.
+            // Left + right = one cycle of yaw rate.
             value = frame.yawRate
         case .marchInPlace:
             value = frame.userAcceleration.magnitude
@@ -80,7 +80,7 @@ public struct RepetitionDetector: Sendable {
         }
         let best = axisVariance.indices.max { axisVariance[$0] < axisVariance[$1] }!
         if let locked = lockedAxis {
-            // Ganti sumbu hanya bila sumbu lain jauh lebih dominan, agar tidak muncul hitungan palsu.
+            // Switch axes only when another axis is much more dominant, to avoid false counts.
             if axisVariance[best] > 2 * axisVariance[locked] {
                 lockedAxis = best
                 counter.reset()

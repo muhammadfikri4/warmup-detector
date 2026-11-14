@@ -1,8 +1,8 @@
 import Foundation
 
-// Pipeline tahap 5 (Evaluate) — sensitivity, PPV, dan perbandingan dengan referensi.
+// Pipeline stage 5 (Evaluate) — sensitivity, PPV, and comparison against the reference.
 
-/// Metrik biner. Kelas positif = kondisi yang ingin dideteksi.
+/// Binary metrics. Positive class = the condition we want to detect.
 public struct BinaryMetrics: Codable, Sendable, Equatable {
     public var truePositive = 0
     public var falsePositive = 0
@@ -21,18 +21,18 @@ public struct BinaryMetrics: Codable, Sendable, Equatable {
     }
 
     public var total: Int { truePositive + falsePositive + trueNegative + falseNegative }
-    /// Dari yang benar-benar positif, berapa yang tertangkap.
+    /// Of the actual positives, how many were caught.
     public var sensitivity: Double? { ratio(truePositive, truePositive + falseNegative) }
     public var specificity: Double? { ratio(trueNegative, trueNegative + falsePositive) }
-    /// Dari yang diprediksi positif, berapa yang benar.
+    /// Of the predicted positives, how many were correct.
     public var ppv: Double? { ratio(truePositive, truePositive + falsePositive) }
     public var npv: Double? { ratio(trueNegative, trueNegative + falseNegative) }
     public var accuracy: Double? { ratio(truePositive + trueNegative, total) }
 }
 
-/// Laporan klasifikasi multi-kelas (confusion matrix + sensitivity/PPV per kelas).
+/// Multi-class classification report (confusion matrix + per-class sensitivity/PPV).
 public struct ClassificationReport: Sendable, Equatable {
-    /// truth → predicted → jumlah
+    /// truth → predicted → count
     public private(set) var counts: [String: [String: Int]] = [:]
 
     public init() {}
@@ -65,12 +65,12 @@ public struct ClassificationReport: Sendable, Equatable {
     }
 
     public func formatted(title: String) -> String {
-        var lines = ["\(title) — akurasi \(pct(accuracy)), rata-rata sensitivity \(pct(macroSensitivity)), n = \(total) jendela"]
-        lines.append(pad("kelas", 14) + pad("n", 7) + pad("sensitivity", 13) + "PPV")
+        var lines = ["\(title) — accuracy \(pct(accuracy)), mean sensitivity \(pct(macroSensitivity)), n = \(total) windows"]
+        lines.append(pad("class", 14) + pad("n", 7) + pad("sensitivity", 13) + "PPV")
         for label in labels {
             lines.append(pad(label, 14) + pad("\(support(of: label))", 7) + pad(pct(sensitivity(of: label)), 13) + pct(ppv(of: label)))
         }
-        lines.append("confusion (baris = kebenaran, kolom = prediksi):")
+        lines.append("confusion (rows = truth, columns = predicted):")
         lines.append(pad("", 14) + labels.map { pad(String($0.prefix(6)), 8) }.joined())
         for t in labels {
             lines.append(pad(t, 14) + labels.map { pad("\(counts[t]?[$0] ?? 0)", 8) }.joined())
@@ -79,9 +79,9 @@ public struct ClassificationReport: Sendable, Equatable {
     }
 }
 
-/// Evaluasi log sesi Mode Studi terhadap referensi.
+/// Evaluates Study Mode session logs against the reference.
 public struct ReadinessReport: Sendable {
-    /// Positif = "Belum Pemanasan" (kondisi berisiko yang ingin ditangkap).
+    /// Positive = "Not ready" (the risky condition we want to catch).
     public var overall = BinaryMetrics()
     public var perParticipant: [String: BinaryMetrics] = [:]
     public var sessions = 0
@@ -126,36 +126,36 @@ public struct ReadinessReport: Sendable {
 
     public func formatted() -> String {
         var l: [String] = []
-        l.append("== Kesiapan (positif = Belum Pemanasan) ==")
-        l.append("Sesi: \(sessions), berlabel referensi: \(overall.total), tanpa referensi: \(withoutReference)")
+        l.append("== Readiness (positive = Not ready) ==")
+        l.append("Sessions: \(sessions), with reference: \(overall.total), without reference: \(withoutReference)")
         l.append("TP \(overall.truePositive)  FP \(overall.falsePositive)  TN \(overall.trueNegative)  FN \(overall.falseNegative)")
-        l.append("Sensitivity \(pct(overall.sensitivity))  Specificity \(pct(overall.specificity))  PPV \(pct(overall.ppv))  NPV \(pct(overall.npv))  Akurasi \(pct(overall.accuracy))")
+        l.append("Sensitivity \(pct(overall.sensitivity))  Specificity \(pct(overall.specificity))  PPV \(pct(overall.ppv))  NPV \(pct(overall.npv))  Accuracy \(pct(overall.accuracy))")
         if !perParticipant.isEmpty {
-            l.append("Per partisipan:")
+            l.append("Per participant:")
             for (p, m) in perParticipant.sorted(by: { $0.key < $1.key }) {
-                l.append("  \(p): n=\(m.total) sensitivity \(pct(m.sensitivity)) PPV \(pct(m.ppv)) akurasi \(pct(m.accuracy))")
+                l.append("  \(p): n=\(m.total) sensitivity \(pct(m.sensitivity)) PPV \(pct(m.ppv)) accuracy \(pct(m.accuracy))")
             }
         }
         l.append("")
-        l.append("== Latensi pengecekan (target ≤ 3 dtk) ==")
+        l.append("== Check latency (target ≤ 3 s) ==")
         let sorted = latencies.sorted()
         if !sorted.isEmpty {
-            l.append(String(format: "median %.2f dtk, maks %.2f dtk, ≤ 3 dtk: %@", sorted[sorted.count / 2], sorted.last!, pct(latencyWithinBudget)))
+            l.append(String(format: "median %.2f s, max %.2f s, ≤ 3 s: %@", sorted[sorted.count / 2], sorted.last!, pct(latencyWithinBudget)))
         }
         l.append("")
-        l.append("== Hitungan repetisi vs hitungan manual ==")
-        if repErrors.isEmpty { l.append("Belum ada referensi manual.") }
+        l.append("== Rep count vs manual count ==")
+        if repErrors.isEmpty { l.append("No manual reference yet.") }
         for (exercise, errors) in repErrors.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
             let mae = errors.reduce(0, +) / Double(errors.count)
             let rel = repRelativeErrors[exercise] ?? []
             let mape = rel.isEmpty ? nil : rel.reduce(0, +) / Double(rel.count)
-            l.append(String(format: "%@: n=%d, rata-rata selisih %.1f rep, galat relatif %@", exercise.displayName, errors.count, mae, pct(mape)))
+            l.append(String(format: "%@: n=%d, mean difference %.1f reps, relative error %@", exercise.displayName, errors.count, mae, pct(mape)))
         }
         l.append("")
-        l.append("== Kualitas data HR ==")
-        l.append("Sesi dengan celah data: \(sessionsWithGaps)/\(sessions), sampel HR dibuang: \(removedHRSamples)")
+        l.append("== HR data quality ==")
+        l.append("Sessions with data gaps: \(sessionsWithGaps)/\(sessions), HR samples removed: \(removedHRSamples)")
         if finalConfirmation.total > 0 {
-            l.append("Konfirmasi akhir masuk zona: \(finalConfirmation.confirmed)/\(finalConfirmation.total)")
+            l.append("Final confirmation in zone: \(finalConfirmation.confirmed)/\(finalConfirmation.total)")
         }
         return l.joined(separator: "\n")
     }

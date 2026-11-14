@@ -1,6 +1,6 @@
 import Foundation
 
-/// Jenis olahraga yang bisa dipilih pengguna sebelum menekan Start Workout.
+/// Workout types the user can pick before tapping Start Workout.
 public enum WorkoutKind: String, CaseIterable, Codable, Sendable, Identifiable {
     case outdoorRun
     case indoorRun
@@ -13,12 +13,12 @@ public enum WorkoutKind: String, CaseIterable, Codable, Sendable, Identifiable {
 
     public var displayName: String {
         switch self {
-        case .outdoorRun: "Lari Outdoor"
-        case .indoorRun: "Lari Indoor"
+        case .outdoorRun: "Outdoor Run"
+        case .indoorRun: "Indoor Run"
         case .hiit: "HIIT"
-        case .strength: "Latihan Beban"
-        case .racket: "Olahraga Raket"
-        case .cycling: "Bersepeda"
+        case .strength: "Strength Training"
+        case .racket: "Racket Sports"
+        case .cycling: "Cycling"
         }
     }
 
@@ -34,7 +34,7 @@ public enum WorkoutKind: String, CaseIterable, Codable, Sendable, Identifiable {
     }
 }
 
-/// Gerakan pemanasan yang didukung (FR-P03).
+/// Supported warm-up exercises (FR-P03).
 public enum Exercise: String, CaseIterable, Codable, Sendable {
     case armCircles
     case marchInPlace
@@ -50,14 +50,14 @@ public enum Exercise: String, CaseIterable, Codable, Sendable {
 
     public var instruction: String {
         switch self {
-        case .armCircles: "Putar lengan lurus membentuk lingkaran besar."
-        case .marchInPlace: "Jalan di tempat, angkat lutut setinggi pinggul dan ayunkan lengan."
-        case .torsoTwist: "Tekuk siku, putar badan ke kiri lalu ke kanan."
+        case .armCircles: "Keep your arms straight and swing them in big circles."
+        case .marchInPlace: "March in place, lift your knees to hip height and swing your arms."
+        case .torsoTwist: "Bend your elbows and twist your torso left, then right."
         }
     }
 
-    /// Perkiraan durasi satu repetisi, dipakai planner untuk mengubah durasi jadi target repetisi.
-    /// `nil` berarti gerakan ini diukur dengan durasi aktif, bukan repetisi.
+    /// Estimated duration of one rep, used by the planner to turn a duration into a rep target.
+    /// `nil` means this exercise is measured by active duration, not reps.
     public var secondsPerRep: Double? {
         switch self {
         case .armCircles: 2.0
@@ -67,7 +67,7 @@ public enum Exercise: String, CaseIterable, Codable, Sendable {
     }
 }
 
-/// Label keluaran model klasifikasi gerakan.
+/// Output labels of the motion classification model.
 public enum MotionLabel: String, Codable, Sendable, CaseIterable {
     case armCircles
     case marchInPlace
@@ -83,8 +83,8 @@ public enum MotionLabel: String, Codable, Sendable, CaseIterable {
         }
     }
 
-    /// Menerima variasi penulisan label dari data latih CreateML
-    /// (mis. `arm_circles`, `High Knees`, `torso-twist`, `random`).
+    /// Accepts label spelling variants from CreateML training data
+    /// (e.g. `arm_circles`, `High Knees`, `torso-twist`, `random`).
     public init(classLabel: String) {
         let key = classLabel.lowercased().filter { $0.isLetter || $0.isNumber }
         switch key {
@@ -138,7 +138,7 @@ public struct HeartRateSample: Codable, Sendable, Equatable {
     }
 }
 
-/// Parameter kalibrasi personal (FR-S04). Nilai default dipakai bila data HealthKit kosong.
+/// Personal calibration parameters (FR-S04). Defaults are used when HealthKit has no data.
 public struct UserPhysiology: Codable, Sendable, Equatable {
     public var age: Int
     public var restingHR: Double
@@ -153,17 +153,17 @@ public struct UserPhysiology: Codable, Sendable, Equatable {
     }
 }
 
-/// Data pemulihan yang dibaca dari HealthKit untuk kalibrasi target (FR-I01).
+/// Recovery data read from HealthKit to calibrate the target (FR-I01).
 public struct RecoveryContext: Codable, Sendable, Equatable {
     public var workout: WorkoutKind
     public var physiology: UserPhysiology
-    /// Durasi tidur semalam (jam), `nil` bila tidak ada data.
+    /// Last night's sleep duration (hours), `nil` when there is no data.
     public var sleepHours: Double?
-    /// Rata-rata RHR 30 hari terakhir, untuk mendeteksi RHR pagi yang lebih tinggi dari biasanya.
+    /// 30-day average RHR, used to detect a morning RHR that is higher than usual.
     public var restingHRBaseline: Double?
-    /// Jam lokal (0–23) saat tombol Start ditekan.
+    /// Local hour (0–23) when Start was tapped.
     public var startHour: Int
-    /// HRV terbaru (SDNN, ms) dari HealthKit, dan rata-rata 30 hari sebagai baseline pribadi.
+    /// Latest HRV (SDNN, ms) from HealthKit, and the 30-day average as a personal baseline.
     public var hrvSDNN: Double?
     public var hrvBaseline: Double?
 
@@ -180,9 +180,9 @@ public struct RecoveryContext: Codable, Sendable, Equatable {
 }
 
 enum Format {
-    /// Angka desimal gaya Indonesia: 5.25 → "5,3".
+    /// Decimal number with a fixed number of digits: 5.25 → "5.3".
     static func decimal(_ value: Double, digits: Int = 1) -> String {
-        String(format: "%.\(digits)f", value).replacingOccurrences(of: ".", with: ",")
+        String(format: "%.\(digits)f", value)
     }
 
     static func bpm(_ value: Double) -> String { "\(Int(value.rounded())) bpm" }

@@ -1,7 +1,7 @@
 import Foundation
 
-/// Pipeline tahap 3 (Features) untuk model yang dilatih di iPhone:
-/// ringkasan angka per jendela 2 detik yang bisa dihitung sama persis di iPhone (training) dan watch (inferensi).
+/// Pipeline stage 3 (Features) for the model trained on iPhone:
+/// numeric summary per 2-second window, computed identically on iPhone (training) and watch (inference).
 public enum MotionFeatureVector {
     private static let channels: [(String, @Sendable (MotionFrame) -> Double)] = [
         ("acc_x", { $0.userAcceleration.x }), ("acc_y", { $0.userAcceleration.y }), ("acc_z", { $0.userAcceleration.z }),
@@ -9,7 +9,7 @@ public enum MotionFeatureVector {
         ("grav_x", { $0.gravity.x }), ("grav_y", { $0.gravity.y }), ("grav_z", { $0.gravity.z }),
         ("acc_mag", { $0.userAcceleration.magnitude }), ("rot_mag", { $0.rotationRate.magnitude }), ("yaw", { $0.yawRate }),
     ]
-    /// Kanal yang frekuensi ayunannya dihitung (perkiraan Hz dari laju lintas-rata-rata).
+    /// Channels whose oscillation frequency is computed (Hz estimated from the mean-crossing rate).
     private static let frequencyChannels = ["acc_mag", "rot_mag", "yaw"]
 
     public static let names: [String] =

@@ -1,10 +1,10 @@
 // swift-tools-version: 6.0
-// WarmUpCore — logika murni (tanpa HealthKit/CoreMotion) untuk pilar
-// Prediction & Interpretation, sehingga bisa diuji dengan `swift test` di Mac.
+// WarmUpCore — pure logic (no HealthKit/CoreMotion) for the
+// Prediction & Interpretation pillars, so it can be tested with `swift test` on a Mac.
 //
-// Tool Mac (pipeline data):
-//   swift run warmup-train <folder-csv> [output.mlmodel]   — clean → model → evaluate (leave-one-person-out)
-//   swift run warmup-eval <sessions.jsonl>...              — evaluasi kesiapan vs referensi
+// Mac tools (data pipeline):
+//   swift run warmup-train <csv-folder> [output.mlmodel]   — clean → model → evaluate (leave-one-person-out)
+//   swift run warmup-eval <sessions.jsonl>...              — readiness evaluation vs reference
 import PackageDescription
 
 let package = Package(

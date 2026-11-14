@@ -41,7 +41,7 @@ struct HeartRateLabel: View {
     }
 }
 
-/// Pipeline tahap 2: celah & data yang dibuang tetap terlihat, tidak disembunyikan.
+/// Pipeline stage 2: gaps & discarded data stay visible, never hidden.
 struct DataQualityNote: View {
     let quality: HeartRateQuality?
 
@@ -49,8 +49,8 @@ struct DataQualityNote: View {
         if let quality, quality.removedCount > 0 || quality.longestGapMinutes >= 3 {
             Label {
                 Text([
-                    quality.removedCount > 0 ? "\(quality.removedCount) sampel HR dibuang" : nil,
-                    quality.longestGapMinutes >= 3 ? "celah data \(Int(quality.longestGapMinutes)) mnt" : nil,
+                    quality.removedCount > 0 ? "\(quality.removedCount) HR samples dropped" : nil,
+                    quality.longestGapMinutes >= 3 ? "\(Int(quality.longestGapMinutes)) min data gap" : nil,
                 ].compactMap { $0 }.joined(separator: " · "))
             } icon: {
                 Image(systemName: "exclamationmark.circle")
@@ -88,16 +88,16 @@ struct HomeView: View {
                     }
                 }
             } header: {
-                Text("Mulai Workout")
+                Text("Start Workout")
             }
             Section {
-                NavigationLink { SettingsView() } label: { Label("Pengaturan", systemImage: "gearshape") }
-                NavigationLink { RecorderView() } label: { Label("Rekam Data Latih", systemImage: "waveform.path.ecg") }
+                NavigationLink { SettingsView() } label: { Label("Settings", systemImage: "gearshape") }
+                NavigationLink { RecorderView() } label: { Label("Record Training Data", systemImage: "waveform.path.ecg") }
             }
         }
         .navigationTitle("WarmUp Pulse")
         .task { await flow.prepare() }
-        .alert("Perhatian", isPresented: Binding(get: { flow.errorMessage != nil }, set: { if !$0 { flow.errorMessage = nil } })) {
+        .alert("Heads Up", isPresented: Binding(get: { flow.errorMessage != nil }, set: { if !$0 { flow.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(flow.errorMessage ?? "")
@@ -105,7 +105,7 @@ struct HomeView: View {
     }
 }
 
-// MARK: - 2–3. Akuisisi & evaluasi
+// MARK: - 2–3. Acquisition & evaluation
 
 struct CheckingView: View {
     @Environment(AppFlow.self) private var flow
@@ -113,18 +113,18 @@ struct CheckingView: View {
     var body: some View {
         VStack(spacing: 10) {
             ProgressView()
-            Text("Mengecek kesiapan…")
+            Text("Checking readiness…")
                 .font(.headline)
             HeartRateLabel(bpm: flow.heartRate)
         }
         .navigationBarBackButtonHidden()
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Batal", systemImage: "xmark") { flow.cancel() } }
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel", systemImage: "xmark") { flow.cancel() } }
         }
     }
 }
 
-// MARK: - 4. Peringatan & rencana
+// MARK: - 4. Warning & plan
 
 struct UnreadyView: View {
     @Environment(AppFlow.self) private var flow
@@ -134,7 +134,7 @@ struct UnreadyView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: "thermometer.low")
-                    Text("Belum Pemanasan")
+                    Text("Not Warmed Up")
                 }
                 .font(Theme.headline)
                 .foregroundStyle(Theme.warm)
@@ -145,11 +145,11 @@ struct UnreadyView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if flow.isRefiningWithAI {
-                    Label("Apple Intelligence menyesuaikan…", systemImage: "sparkles")
+                    Label("Apple Intelligence is tailoring…", systemImage: "sparkles")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 } else if flow.messageFromAI {
-                    Label("Disesuaikan Apple Intelligence", systemImage: "sparkles")
+                    Label("Tailored by Apple Intelligence", systemImage: "sparkles")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -157,21 +157,28 @@ struct UnreadyView: View {
                 DataQualityNote(quality: flow.assessment?.hrQuality)
 
                 if let plan = flow.plan {
-                    Text("\(plan.durationMinutes) menit · \(plan.exerciseListText)")
+                    Text("\(plan.durationMinutes) min · \(plan.exerciseListText)")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Theme.warm)
                 }
 
-                Button("Mulai Pemanasan") { flow.beginWarmUp() }
+                if let plan = flow.plan, !plan.steps.isEmpty {
+                    NavigationLink {
+                        MovesPreviewView(steps: plan.steps)
+                    } label: {
+                        Label("Preview Moves", systemImage: "figure.cooldown")
+                    }
+                }
+                Button("Start Warm-Up") { flow.beginWarmUp() }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.warm)
-                Button("Lewati") { flow.skipWarmUp() }
+                Button("Skip") { flow.skipWarmUp() }
                     .buttonStyle(.bordered)
             }
         }
         .navigationBarBackButtonHidden()
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Batal", systemImage: "xmark") { flow.cancel() } }
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel", systemImage: "xmark") { flow.cancel() } }
         }
     }
 }
@@ -180,12 +187,40 @@ struct UnreadyView: View {
 
 struct WarmUpView: View {
     @Environment(AppFlow.self) private var flow
+    /// Step whose big intro demo is showing (first ~3 s of each move).
+    @State private var introStep: Int?
+    @State private var showsDemo = false
 
     var body: some View {
         if let step = flow.currentStep, let plan = flow.activePlan {
+            content(step: step, plan: plan)
+                .overlay {
+                    if introStep == flow.stepIndex {
+                        ExerciseDemoCard(step: step, caption: flow.stepIndex == 0 ? "First move" : "Next move")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(.black.opacity(0.92))
+                            .onTapGesture { introStep = nil }
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: introStep)
+                .task(id: flow.stepIndex) {
+                    introStep = flow.stepIndex
+                    try? await Task.sleep(for: .seconds(3))
+                    if introStep == flow.stepIndex { introStep = nil }
+                }
+                .sheet(isPresented: $showsDemo) {
+                    ScrollView { ExerciseDemoCard(step: step) }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private func content(step: WarmUpStep, plan: WarmUpPlan) -> some View {
+        Group {
             VStack(spacing: 2) {
                 HStack {
-                    Text("Gerakan \(flow.stepIndex + 1)/\(plan.steps.count)")
+                    Text("Move \(flow.stepIndex + 1)/\(plan.steps.count)")
                         .font(.footnote.weight(.semibold))
                     Spacer()
                     HeartRateLabel(bpm: flow.heartRate)
@@ -196,21 +231,33 @@ struct WarmUpView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
 
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(progressText(step))
-                        .font(Theme.counter)
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                    Text(targetText(step))
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Button { showsDemo = true } label: {
+                        ExerciseDemoView(exercise: step.exercise, accent: .white, showsTrail: false)
+                            .frame(width: 54, height: 54)
+                            .background(.black.opacity(0.25), in: .rect(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Show how to do \(step.exercise.displayName)")
+
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        Text(progressText(step))
+                            .font(Theme.counter)
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                        Text(targetText(step))
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                 }
 
                 ProgressView(value: min(flow.stepProgress / step.target.value, 1))
                     .tint(flow.isPaused ? .gray : Theme.warm)
 
                 if flow.isPaused {
-                    Text("Dijeda — ayo gerak lagi!")
+                    Text("Paused — keep moving!")
                         .font(.headline)
                         .foregroundStyle(.yellow)
                 } else if let p = flow.lastPrediction {
@@ -223,7 +270,7 @@ struct WarmUpView: View {
             .containerBackground(Theme.warm.gradient, for: .navigation)
             .navigationBarBackButtonHidden()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Lewati", systemImage: "forward.end") { flow.skipWarmUp() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Skip", systemImage: "forward.end") { flow.skipWarmUp() } }
             }
         }
     }
@@ -243,11 +290,11 @@ struct WarmUpView: View {
     }
 
     private func label(_ l: MotionLabel) -> String {
-        l.exercise?.displayName ?? (l == .idle ? "Diam" : "Gerakan lain")
+        l.exercise?.displayName ?? (l == .idle ? "Still" : "Other move")
     }
 }
 
-// MARK: - 6. Konfirmasi akhir
+// MARK: - 6. Final confirmation
 
 struct ConfirmView: View {
     @Environment(AppFlow.self) private var flow
@@ -258,14 +305,14 @@ struct ConfirmView: View {
                 if flow.confirmTimedOut {
                     Text(flow.message)
                         .font(.body)
-                    Button("Tambah 1 Menit") { flow.addExtraMinute() }
+                    Button("Add 1 Minute") { flow.addExtraMinute() }
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.warm)
-                    Button("Mulai Sekarang") { flow.enterWorkout() }
+                    Button("Start Now") { flow.enterWorkout() }
                         .buttonStyle(.bordered)
                 } else {
                     ProgressView()
-                    Text("Memvalidasi detak jantung…")
+                    Text("Checking heart rate…")
                         .font(.headline)
                         .multilineTextAlignment(.center)
                     HeartRateLabel(bpm: flow.heartRate)
@@ -290,12 +337,12 @@ struct ReadyView: View {
             VStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 40))
-                Text("Siap Olahraga")
+                Text("Ready to Go")
                     .font(Theme.headline)
                 Text(flow.message)
                     .font(.footnote)
                     .multilineTextAlignment(.center)
-                Button("Mulai") { flow.enterWorkout() }
+                Button("Start") { flow.enterWorkout() }
                     .buttonStyle(.borderedProminent)
                     .tint(.white.opacity(0.3))
             }
@@ -306,7 +353,7 @@ struct ReadyView: View {
     }
 }
 
-// MARK: - Latihan inti
+// MARK: - Main workout
 
 struct WorkoutView: View {
     @Environment(AppFlow.self) private var flow
@@ -324,7 +371,7 @@ struct WorkoutView: View {
                 HeartRateLabel(bpm: flow.heartRate)
                     .font(.title2)
                 Spacer(minLength: 0)
-                Button("Akhiri", role: .destructive) { flow.endWorkout() }
+                Button("End", role: .destructive) { flow.endWorkout() }
                     .buttonStyle(.bordered)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -340,7 +387,7 @@ struct FinishedView: View {
     var body: some View {
         List {
             Section {
-                Label("Workout tersimpan", systemImage: "checkmark.seal.fill")
+                Label("Workout saved", systemImage: "checkmark.seal.fill")
                     .font(.headline)
                     .foregroundStyle(Theme.ready)
                 if let note = flow.summaryNote {
@@ -350,7 +397,7 @@ struct FinishedView: View {
             if flow.isStudyLogging, flow.stepLogs.contains(where: { if case .reps = $0.target { true } else { false } }) {
                 ReferenceCountsSection(steps: flow.stepLogs, references: $references)
             }
-            Button(flow.isStudyLogging ? "Simpan & Selesai" : "Selesai") { flow.backHome(references: references) }
+            Button(flow.isStudyLogging ? "Save & Finish" : "Done") { flow.backHome(references: references) }
                 .buttonStyle(.borderedProminent)
         }
         .navigationBarBackButtonHidden()

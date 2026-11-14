@@ -3,9 +3,9 @@ import Observation
 import WarmUpCore
 import WatchConnectivity
 
-/// Jembatan watch ↔ iPhone.
-/// - Menerima: pengaturan (application context), model hasil training & perintah reset (user info).
-/// - Mengirim: CSV data latih (file transfer), baris log evaluasi (user info), status watch (application context).
+/// Watch ↔ iPhone bridge.
+/// - Receives: settings (application context), trained model & reset command (user info).
+/// - Sends: training data CSV (file transfer), evaluation log lines (user info), watch status (application context).
 @Observable
 final class PhoneConnector: NSObject {
     static let shared = PhoneConnector()
@@ -19,7 +19,7 @@ final class PhoneConnector: NSObject {
         WCSession.default.activate()
     }
 
-    // MARK: Kirim ke iPhone
+    // MARK: Send to iPhone
 
     func sendTrainingFile(_ url: URL) {
         guard isActivated else { return }
@@ -41,7 +41,7 @@ final class PhoneConnector: NSObject {
         }
     }
 
-    // MARK: Terima dari iPhone
+    // MARK: Receive from iPhone
 
     private func didActivate(context: Data?) {
         isActivated = true
@@ -69,8 +69,8 @@ final class PhoneConnector: NSObject {
     }
 
     private func didFinishTransfer(of url: URL) {
-        // Rekaman otomatis dihapus setelah sampai di iPhone agar penyimpanan watch tidak penuh.
-        // Rekaman manual tetap disimpan agar jumlahnya terlihat di layar perekam.
+        // Auto-recordings are deleted once they reach iPhone so watch storage doesn't fill up.
+        // Manual recordings are kept so their count shows on the recorder screen.
         if RecordingName(fileName: url.lastPathComponent)?.isAuto == true {
             try? FileManager.default.removeItem(at: url)
         }
@@ -101,7 +101,7 @@ extension PhoneConnector: WCSessionDelegate {
     }
 }
 
-/// Model logistic regression kiriman iPhone, disimpan di Documents/models/learned.json.
+/// Logistic regression model sent from iPhone, stored at Documents/models/learned.json.
 enum ModelStore {
     nonisolated static var url: URL {
         URL.documentsDirectory.appending(path: "models/learned.json")

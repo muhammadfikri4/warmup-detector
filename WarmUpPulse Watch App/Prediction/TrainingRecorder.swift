@@ -3,11 +3,11 @@ import HealthKit
 import Observation
 import WarmUpCore
 
-/// Perekam data latih untuk CreateML (pipeline tahap 1: Collect).
-/// Menulis CSV 50 Hz ke Documents/training/ dengan nama `<label>_<P01>_<L|R>_<epoch>.csv`.
-/// Identitas hanya berupa kode samaran; nama asli tidak pernah disimpan.
-/// Ambil berkas lewat Xcode › Devices and Simulators › WarmUp Pulse › Download Container,
-/// lalu jalankan `swift run warmup-train` (lihat README).
+/// Training data recorder for CreateML (pipeline stage 1: Collect).
+/// Writes 50 Hz CSVs to Documents/training/ named `<label>_<P01>_<L|R>_<epoch>.csv`.
+/// Identity is only a pseudonymous code; real names are never stored.
+/// Pull the files via Xcode › Devices and Simulators › WarmUp Pulse › Download Container,
+/// then run `swift run warmup-train` (see README).
 @Observable
 final class TrainingRecorder {
     enum State: Equatable {
@@ -34,7 +34,7 @@ final class TrainingRecorder {
         URL.documentsDirectory.appending(path: "training", directoryHint: .isDirectory)
     }
 
-    /// Jumlah rekaman per label untuk partisipan aktif — untuk melihat label mana yang masih kurang.
+    /// Recording count per label for the active participant — shows which labels still need more.
     func countsForCurrentParticipant() -> [MotionLabel: Int] {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: Self.directory.path)) ?? []
         var counts: [MotionLabel: Int] = [:]
@@ -47,7 +47,7 @@ final class TrainingRecorder {
 
     func start() {
         guard AppSettings.consent else {
-            state = .failed("Centang persetujuan partisipan dulu.")
+            state = .failed("Give participant consent first.")
             return
         }
         task?.cancel()
@@ -69,7 +69,7 @@ final class TrainingRecorder {
             if Task.isCancelled { return }
         }
 
-        // Sesi workout menjaga app tetap berjalan saat layar mati (lengan bergerak).
+        // The workout session keeps the app running while the screen is off (arm moving).
         try? await workout.start(.hiit)
         let name = RecordingName(label: label.rawValue, participant: AppSettings.participant,
                                  wrist: AppSettings.wrist, id: String(Int(Date().timeIntervalSince1970)))
@@ -94,7 +94,7 @@ final class TrainingRecorder {
             try MotionCSV.encode(frames, name: name).write(to: url, atomically: true, encoding: .utf8)
             PhoneConnector.shared.sendTrainingFile(url)
             let warning = quality.rejectionReason().map { " ⚠︎ \($0)" } ?? ""
-            state = .saved(String(format: "%@ · %d sampel · %.0f Hz%@", name.session, quality.sampleCount, quality.effectiveHz, warning))
+            state = .saved(String(format: "%@ · %d samples · %.0f Hz%@", name.session, quality.sampleCount, quality.effectiveHz, warning))
         } catch {
             state = .failed(error.localizedDescription)
         }

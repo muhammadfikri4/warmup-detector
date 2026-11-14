@@ -3,7 +3,7 @@ import Observation
 import SwiftUI
 import WarmUpCore
 
-/// Sumber kebenaran pengaturan + data + model di iPhone.
+/// Source of truth for settings, data and models on the iPhone.
 @Observable
 final class CompanionStore {
     private(set) var settings: CompanionSettings
@@ -14,7 +14,7 @@ final class CompanionStore {
 
     private(set) var isTraining = false
     private(set) var trainingReport: String?
-    /// Model baru yang LOLOS evaluasi dan siap dikirim.
+    /// A new model that PASSED evaluation and is ready to send.
     private(set) var candidate: SoftmaxModel?
     var message: String?
 
@@ -41,12 +41,12 @@ final class CompanionStore {
         connector.push(settings)
     }
 
-    // MARK: Pengaturan → watch
+    // MARK: Settings → watch
 
     func update(_ change: (inout CompanionSettings) -> Void) {
         var next = settings
         change(&next)
-        if next.participant != settings.participant { next.consent = false } // ganti orang = minta persetujuan lagi
+        if next.participant != settings.participant { next.consent = false } // new person = ask for consent again
         if !next.consent { next.autoCollect = false }
         guard next != settings else { return }
         next.updatedAt = .now
@@ -59,7 +59,7 @@ final class CompanionStore {
         Binding(get: { self.settings[keyPath: keyPath] }, set: { value in self.update { $0[keyPath: keyPath] = value } })
     }
 
-    // MARK: Data dari watch
+    // MARK: Data from the watch
 
     func refreshInventory() {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: CompanionPaths.training.path)) ?? []
@@ -78,7 +78,7 @@ final class CompanionStore {
         } else {
             try? data.write(to: CompanionPaths.sessions)
         }
-        // Watch sudah mengembalikan skenario ke "Tidak diketahui"; samakan di iPhone.
+        // The watch has already reset the scenario to "Unknown"; mirror that on the iPhone.
         update { $0.scenario = .unknown }
         refreshInventory()
     }
@@ -106,12 +106,12 @@ final class CompanionStore {
     }
 
     var readinessReport: String {
-        _ = sessionCount // observasi: hitung ulang saat log baru masuk
+        _ = sessionCount // observation: recompute when a new log arrives
         let entries = loadSessions()
-        return entries.isEmpty ? "Belum ada log sesi. Aktifkan Mode Studi lalu jalankan sesi di watch." : ReadinessReport(entries: entries).formatted()
+        return entries.isEmpty ? "No session logs yet. Turn on Study Mode, then run a session on the watch." : ReadinessReport(entries: entries).formatted()
     }
 
-    // MARK: Training (pemicu manual)
+    // MARK: Training (manual trigger)
 
     func train() {
         guard !isTraining else { return }
@@ -132,7 +132,7 @@ final class CompanionStore {
         }
     }
 
-    /// Berjalan di luar main thread: baca CSV → TrainingPipeline.
+    /// Runs off the main thread: read CSVs → TrainingPipeline.
     nonisolated private static func runTraining(urls: [URL], current: SoftmaxModel?, golden: Set<String>) -> TrainingResult {
         var config = TrainingConfiguration()
         config.goldenParticipants = golden
@@ -150,19 +150,19 @@ final class CompanionStore {
             try FileManager.default.createDirectory(at: CompanionPaths.activeModel.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: CompanionPaths.activeModel, options: .atomic)
         } catch {
-            message = "Gagal menyimpan model: \(error.localizedDescription)"
+            message = "Couldn't save the model: \(error.localizedDescription)"
             return
         }
         connector.sendModel(data)
         activeModel = candidate
         self.candidate = nil
-        message = "Model v\(candidate.version) dikirim. Watch akan memakainya pada pemanasan berikutnya."
+        message = "Model v\(candidate.version) sent. The watch will use it on the next warm-up."
     }
 
     func resetModel() {
         try? FileManager.default.removeItem(at: CompanionPaths.activeModel)
         activeModel = nil
         connector.resetModel()
-        message = "Watch kembali ke model bawaan."
+        message = "The watch is back on the built-in model."
     }
 }

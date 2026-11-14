@@ -17,7 +17,7 @@ public struct Vector3: Codable, Sendable, Equatable {
     public subscript(axis: Int) -> Double { axis == 0 ? x : (axis == 1 ? y : z) }
 }
 
-/// Satu sampel CMDeviceMotion (50 Hz). Satuan: g untuk akselerasi/gravitasi, rad/s untuk rotasi.
+/// One CMDeviceMotion sample (50 Hz). Units: g for acceleration/gravity, rad/s for rotation.
 public struct MotionFrame: Codable, Sendable, Equatable {
     public var timestamp: TimeInterval
     public var userAcceleration: Vector3
@@ -31,7 +31,7 @@ public struct MotionFrame: Codable, Sendable, Equatable {
         self.gravity = gravity
     }
 
-    /// Kecepatan rotasi di sekitar sumbu vertikal (yaw) — dominan saat Torso Twist.
+    /// Rotation rate around the vertical axis (yaw) — dominant during Torso Twist.
     public var yawRate: Double {
         let g = gravity.magnitude
         return g > 0.1 ? rotationRate.dot(gravity) / g : 0
@@ -50,15 +50,15 @@ public struct MotionPrediction: Codable, Sendable, Equatable {
     }
 }
 
-/// Kontrak classifier gerakan. Implementasi: CoreML (`WarmUpClassifier.mlmodel`) atau heuristik fallback.
+/// Motion classifier contract. Implementations: CoreML (`WarmUpClassifier.mlmodel`) or the heuristic fallback.
 public protocol MotionClassifying: AnyObject {
     var name: String { get }
-    /// Jumlah sampel per jendela prediksi (2 detik × 50 Hz = 100).
+    /// Samples per prediction window (2 seconds × 50 Hz = 100).
     var windowSize: Int { get }
     func classify(_ window: [MotionFrame]) -> MotionPrediction?
 }
 
-/// Buffer sliding window berukuran tetap dengan hop (jarak antar inferensi).
+/// Fixed-size sliding window buffer with a hop (distance between inferences).
 public struct SlidingWindow: Sendable {
     public let size: Int
     public let hop: Int
@@ -71,7 +71,7 @@ public struct SlidingWindow: Sendable {
         buffer.reserveCapacity(size + 1)
     }
 
-    /// Menambahkan sampel; mengembalikan isi jendela bila sudah waktunya inferensi.
+    /// Appends a sample; returns the window contents when it is time to run inference.
     public mutating func append(_ frame: MotionFrame) -> [MotionFrame]? {
         buffer.append(frame)
         if buffer.count > size { buffer.removeFirst(buffer.count - size) }
@@ -87,14 +87,14 @@ public struct SlidingWindow: Sendable {
     }
 }
 
-/// Fitur ringkas dari satu jendela, dipakai classifier heuristik dan pengukur intensitas awal.
+/// Compact features of one window, used by the heuristic classifier and the initial intensity gauge.
 public struct MotionFeatures: Sendable, Equatable {
     public var accelerationMean: Double
     public var accelerationStd: Double
     public var rotationMean: Double
-    /// Porsi rotasi di sekitar sumbu vertikal (0–1).
+    /// Fraction of rotation around the vertical axis (0–1).
     public var yawFraction: Double
-    /// Jumlah rentang (max − min) komponen gravitasi di tiga sumbu — besar saat orientasi pergelangan berputar penuh.
+    /// Sum of the ranges (max − min) of the gravity components on all three axes — large when the wrist orientation rotates fully.
     public var gravityRange: Double
 
     public init(_ frames: [MotionFrame]) {
